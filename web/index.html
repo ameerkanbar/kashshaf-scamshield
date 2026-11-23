@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كشّاف | شرطة أبوظبي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<!-- Login -->
+<section id="login" class="login" hidden>
+  <div class="login-card">
+    <div class="brand brand-lg">
+      <svg class="shield" viewBox="0 0 64 64" aria-hidden="true"><use href="#shield"/></svg>
+      <div><b>شرطة أبوظبي</b><small>ABU DHABI POLICE</small></div>
+    </div>
+    <h1>كشّاف</h1>
+    <p class="muted">منصة رصد روابط ومواقع الاحتيال. الدخول للمحللين المصرّح لهم فقط.</p>
+    <form id="loginForm">
+      <label>البريد الإلكتروني<input type="email" id="email" required autocomplete="username" dir="ltr"></label>
+      <label>كلمة المرور<input type="password" id="password" required autocomplete="current-password" dir="ltr"></label>
+      <button class="btn btn-primary btn-block" type="submit">تسجيل الدخول</button>
+      <p class="error" id="loginError" role="alert"></p>
+    </form>
+  </div>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="shield" viewBox="0 0 64 64" aria-hidden="true"><use href="#shield"/></svg>
+      <div><b>شرطة أبوظبي</b><small>ABU DHABI POLICE</small></div>
+    </div>
+    <div class="product">كشّاف <span>منصة رصد الاحتيال الإلكتروني</span></div>
+    <div class="user"><button class="btn btn-sm" id="tourBtn" type="button">دليل الاستخدام</button><span id="userEmail"></span><button class="link" id="logout">خروج</button></div>
+  </header>
+  <nav class="nav" id="nav">
+    <button data-tab="overview" class="active">لوحة المتابعة</button>
+    <button data-tab="scan">فحص رسالة أو رابط</button>
+    <button data-tab="findings">النتائج</button>
+    <button data-tab="blocked">المحظورة</button>
+    <button data-tab="gangs">العصابات</button>
+    <button data-tab="discover">الاكتشاف</button>
+    <button data-tab="agents">الوكلاء</button>
+    <button data-tab="audit">السجل</button>
+    <a class="nav-room" href="/room">غرفة العمليات ↖</a>
+  </nav>
+
+  <main class="container">
+    <div class="toolbar" id="toolbar">
+      <div class="status-strip" id="statusStrip"></div>
+      <!-- One sort for every list on every page (and the operations room) -->
+      <label class="sort-control">الترتيب
+        <select id="sortOrder">
+          <option value="new">الأحدث أولاً</option>
+          <option value="old">الأقدم أولاً</option>
+          <option value="risk">الأخطر أولاً</option>
+        </select>
+      </label>
+    </div>
+
+    <!-- Overview -->
+    <section data-view="overview">
+      <div class="kpis" id="kpis"></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-head"><h2>مواقع الاحتيال المحظورة <span class="sort-note"></span></h2></div><div id="latestFraud"></div></div>
+        <div class="panel"><div class="panel-head"><h2>العصابات <span class="sort-note"></span></h2></div><div id="topGangs"></div></div>
+      </div>
+    </section>
+
+    <!-- Scan -->
+    <section data-view="scan" hidden>
+      <div class="panel">
+        <div class="panel-head"><h2>فحص رسالة أو رابط</h2></div>
+        <p class="muted">الصق رسالة نصية أو رسالة واتساب أو بريداً أو رابطاً. يستخرج النظام الروابط ويرسلها للوكلاء فوراً، وتظهر النتيجة تحت.</p>
+        <textarea id="scanText" rows="5" placeholder="مثال: شرطة أبوظبي: لديك مخالفة غير مدفوعة، ادفع الآن عبر http://..."></textarea>
+        <div class="row-actions"><button class="btn btn-primary" id="scanBtn">إرسال للوكلاء</button><span id="scanMsg" class="error" role="alert"></span></div>
+      </div>
+      <!-- Only the latest check is shown here; a new check replaces it -->
+      <div class="panel scan-result" id="scanResult" aria-live="polite" hidden></div>
+    </section>
+
+    <!-- Findings -->
+    <section data-view="findings" hidden>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>النتائج</h2>
+          <div class="filters">
+            <input id="search" type="search" placeholder="بحث في الروابط والعناوين" dir="auto">
+            <select id="verdictFilter">
+              <option value="">كل الأحكام</option><option value="fraud">احتيال</option>
+              <option value="suspicious">مشبوه</option><option value="safe">آمن</option>
+              <option value="official">رسمي</option><option value="unreachable">تعذّر الفتح</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th>الحكم</th><th>التاريخ والوقت</th><th>الرابط</th><th>الجهة المنتحَلة</th><th>المصدر</th><th>الحظر</th><th></th></tr></thead>
+          <tbody id="findingsBody"></tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- Blocked -->
+    <section data-view="blocked" hidden>
+      <div class="panel">
+        <div class="panel-head"><h2>المواقع المحظورة <span class="muted" id="blockedCount"></span></h2>
+          <div class="inline"><input id="blockedSearch" type="search" placeholder="بحث في النطاقات" dir="auto">
+            <button class="btn" id="exportBtn">تنزيل القائمة (CSV)</button></div></div>
+        <p class="muted">كل موقع هنا محفوظ في قاعدة البيانات. أي رابط جديد على نفس النطاق يُحظر فوراً بدون فحص أو تكلفة، ومن يفتحه يرى صفحة التحذير.</p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>تاريخ الحظر</th><th>النطاق</th><th>الجهة المنتحَلة</th><th>الدرجة</th>
+          <th>روابط</th><th>مرات الظهور</th><th>أول ظهور</th><th>آخر ظهور</th><th>القرار</th></tr></thead>
+          <tbody id="blockedBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- Gangs -->
+    <section data-view="gangs" hidden>
+      <div class="panel"><div class="panel-head"><h2>العصابات</h2></div>
+        <p class="muted">مواقع تتشارك بوت تيليجرام أو رقم واتساب أو آيبان أو رقم هاتف أو معرّف تحليلات.</p>
+        <div id="gangsList"></div></div>
+    </section>
+
+    <!-- Discovery -->
+    <section data-view="discover" hidden>
+      <div class="panel search-run" id="searchRun">
+          <div class="search-state"><span class="dot" id="searchDot"></span><span id="searchState">لا يوجد بحث يعمل الآن</span></div>
+          <button class="btn btn-stop" id="stopSearchBtn" hidden>■ إيقاف البحث</button>
+      </div>
+      <div class="grid-2" id="discover-panel">
+        <div class="panel"><div class="panel-head"><h2>بحث جوجل كساكن في أبوظبي</h2></div>
+          <p class="muted">النتائج والإعلانات وملخصات الذكاء الاصطناعي ونتائج الخرائط، من هاتف في أبوظبي.</p>
+          <div class="inline"><input id="googleQuery" placeholder="مثال: دفع مخالفات شرطة أبوظبي" dir="auto">
+            <select id="googleLang"><option value="ar">العربية</option><option value="en">English</option></select>
+            <button class="btn btn-primary" id="googleBtn">بحث</button></div>
+          <div class="row-actions"><button class="btn" data-discover="google">تشغيل كل السكان الافتراضيين</button></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h2>مصادر مستمرة</h2></div>
+          <div class="source"><div><b>سجلات الشهادات الرقمية</b><p class="muted">نطاقات جديدة تحمل أسماء جهات رسمية خلال آخر 14 يوماً.</p></div>
+            <button class="btn" data-discover="ct">تشغيل</button></div>
+          <div class="source"><div><b>قوائم التصيّد العامة (OpenPhish)</b><p class="muted">روابط تصيّد حية تستهدف علامات إماراتية.</p></div>
+            <button class="btn" data-discover="feed">تشغيل</button></div>
+          <p class="muted" id="discoverMsg"></p>
+        </div>
+      </div>
+      <div class="panel"><div class="panel-head"><h2>سجل البحث</h2></div>
+        <p class="muted">كل بحث يُحفظ. نفس البحث لا يُعاد خلال 24 ساعة، والروابط الموجودة مسبقاً لا تُفحص من جديد.</p>
+        <div class="table-wrap"><table class="table"><thead><tr><th>التاريخ والوقت</th><th>النوع</th><th>البحث</th><th>روابط جديدة</th><th>موجودة مسبقاً</th><th>منها محظورة الآن</th><th>بواسطة</th></tr></thead>
+          <tbody id="searchLogBody"></tbody></table></div></div>
+    </section>
+
+    <!-- Agents -->
+    <section data-view="agents" hidden>
+      <div class="panel"><div class="panel-head"><h2>الوكلاء <span class="run-state" id="runState"></span></h2>
+        <div class="inline"><label class="muted" for="agentCount">العدد</label><input id="agentCount" type="number" min="1" max="500" value="50" class="num">
+          <button class="btn" id="resizeBtn">تطبيق</button>
+          <button class="btn btn-stop" id="stopBtn">■ إيقاف الوكلاء</button>
+          <button class="btn btn-go" id="startBtn" hidden>▶ تشغيل الوكلاء</button>
+          <a class="btn btn-primary" href="/room">غرفة العمليات</a></div></div>
+        <p class="muted" id="budgetLine"></p>
+        <div class="agents" id="agentsGrid"></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>الوكيل</th><th>الحالة</th><th>فحص</th><th>احتيال كشفه</th><th>يعمل الآن على</th><th>بدأ الفحص</th><th>آخر فحص انتهى</th></tr></thead>
+          <tbody id="agentsBody"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- Audit -->
+    <section data-view="audit" hidden>
+      <div class="panel"><div class="panel-head"><h2>سجل العمليات</h2></div>
+        <div class="table-wrap"><table class="table"><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>الهدف</th></tr></thead>
+          <tbody id="auditBody"></tbody></table></div></div>
+    </section>
+  </main>
+</div>
+
+<!-- Finding detail -->
+<dialog id="detail" class="detail"><div id="detailBody"></div></dialog>
+
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="shield" viewBox="0 0 64 64">
+    <path d="M32 3 7 12v18c0 16 10.5 27.5 25 31 14.5-3.5 25-15 25-31V12L32 3z" fill="#135BA6"/>
+    <path d="M32 8.5 12 16v14c0 13 8.5 22.5 20 25.5 11.5-3 20-12.5 20-25.5V16L32 8.5z" fill="#082E6D"/>
+    <path d="M32 18l3.6 7.4 8.1 1.2-5.9 5.7 1.4 8.1L32 36.6l-7.2 3.8 1.4-8.1-5.9-5.7 8.1-1.2z" fill="#fff"/>
+  </symbol>
+</svg>
+<script src="/assets/tour.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

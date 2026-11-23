@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تم حظر هذه الصفحة | Page blocked</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#082E6D; --navy2:#135BA6; --gold:#ffffff; --red:#C2002F; --ink:#1d2939; --muted:#667085; --bg:#f2f4f7; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px;
+         background: linear-gradient(180deg, #135BA6 0%, #082E6D 100%);
+         font-family: "Noto Kufi Arabic", Arial, sans-serif; color: var(--ink); }
+  .card { width:100%; max-width:560px; background:#fff; border-radius:20px; overflow:hidden;
+          box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+  .top { background:#fff; color:#3F3E45; padding:28px 28px 22px;
+         display:flex; align-items:center; gap:16px; border-bottom: 4px solid #135BA6; }
+  .top svg { flex: 0 0 56px; }
+  .org { font-size:20px; font-weight:700; }
+  .org small { display:block; font-size:13px; font-weight:500; opacity:.8; margin-top:2px; letter-spacing:.3px; }
+  .content { padding:26px 28px 8px; }
+  .badge { display:inline-flex; align-items:center; gap:8px; background:#fef3f2; color:var(--red);
+           border:1px solid #fecdca; border-radius:999px; padding:6px 14px; font-size:14px; font-weight:700; }
+  h1 { font-size:22px; margin:16px 0 10px; line-height:1.5; }
+  p { font-size:16px; line-height:1.9; margin:0 0 12px; color:#344054; }
+  .url { direction:ltr; text-align:left; background:var(--bg); border:1px solid #e4e7ec; border-radius:10px;
+         padding:10px 12px; font:13px/1.5 ui-monospace, Menlo, monospace; color:var(--red); word-break:break-all; margin:6px 0 16px; }
+  .tips { background:#f9fafb; border-radius:12px; padding:14px 18px; margin: 4px 0 18px; }
+  .tips li { margin:4px 0; font-size:15px; line-height:1.8; color:#344054; }
+  .en { direction:ltr; text-align:left; border-top:1px solid #eaecf0; padding-top:16px; margin-top:6px; }
+  .en h2 { font-size:17px; margin:0 0 6px; }
+  .en p { font-size:14.5px; line-height:1.7; color:var(--muted); }
+  .actions { padding: 8px 28px 26px; }
+  button { width:100%; border:0; border-radius:12px; padding:15px; font-size:17px; font-weight:700; cursor:pointer;
+           background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; font-family:inherit; }
+  button:hover { background:var(--navy2); }
+  button:focus-visible { outline:3px solid #135BA6; outline-offset:2px; }
+  .closed { display:none; text-align:center; color:var(--muted); font-size:14px; margin-top:10px; }
+  .foot { text-align:center; font-size:12px; color:#98a2b3; padding: 0 28px 20px; }
+</style>
+</head>
+<body>
+<main class="card" role="alertdialog" aria-labelledby="title" aria-describedby="msg">
+  <div class="top">
+    <svg width="56" height="56" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M32 4 8 13v17c0 15 10 26 24 30 14-4 24-15 24-30V13L32 4z" fill="#135BA6"/>
+      <path d="M32 9 13 16v14c0 12 8 21 19 25 11-4 19-13 19-25V16L32 9z" fill="#082E6D"/>
+      <path d="M22 32l7 7 14-15" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="org">شرطة أبوظبي<small>ABU DHABI POLICE</small></div>
+  </div>
+
+  <div class="content">
+    <span class="badge">⛔ صفحة احتيال محظورة</span>
+    <h1 id="title">مرحباً، معك شرطة أبوظبي</h1>
+    <p id="msg">قمنا بحظر هذه الصفحة لأنها صفحة احتيال. حمايتك تهمّنا، لذلك أوقفنا فتحها قبل أن تُدخل أي بيانات.</p>
+    <div class="url" id="url" aria-label="الرابط المحظور"></div>
+    <ul class="tips">
+      <li>رجاءً لا تضغط على روابط غير رسمية أو روابط لا تعرف مصدرها.</li>
+      <li>لا تُدخل بيانات بطاقتك أو رمز التحقق (OTP) إلا في المواقع والتطبيقات الرسمية.</li>
+      <li>الجهات الرسمية لا تطلب منك الدفع عبر روابط في الرسائل.</li>
+    </ul>
+
+    <div class="en">
+      <h2>Hello from Abu Dhabi Police</h2>
+      <p>We blocked this page because it is a fraud page. Please be careful and do not click unofficial links or links from sources you cannot verify.</p>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="close" type="button">إغلاق الصفحة · Close tab</button>
+    <p class="closed" id="closed">يمكنك إغلاق هذه النافذة الآن · You can close this tab now</p>
+  </div>
+  <div class="foot">Kashshaf · كشّاف</div>
+</main>
+<script src="blocked.js"></script>
+</body>
+</html>

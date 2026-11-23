@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Kashshaf Protection (prototype)",
+  "description": "Blocks fraud links found by Kashshaf and shows an Abu Dhabi Police warning page instead.",
+  "version": "0.1.0",
+  "permissions": ["declarativeNetRequest", "storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js" },
+  "web_accessible_resources": [
+    { "resources": ["blocked.html", "blocked.js"], "matches": ["<all_urls>"] }
+  ]
+}

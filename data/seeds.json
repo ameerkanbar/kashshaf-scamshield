@@ -1,0 +1,16 @@
+{
+  "_note": "Demo inputs. Every *.localhost link points to our own local TEST pages (test_sites/server.py), never to a real scam.",
+  "messages": [
+    "شرطة أبوظبي: لديك مخالفة مرورية غير مدفوعة بقيمة 400 درهم. ادفع خلال 24 ساعة لتجنب حجز المركبة: http://adpolice-fines-pay.localhost:8081/pay",
+    "TAMM: You are eligible for a refund of AED 1,250. Claim before midnight: http://tamm-refund-uae.localhost:8081/claim",
+    "Aramex: your parcel is on hold. Pay AED 5 redelivery fee: http://aramex-redelivery.localhost:8081/track?id=AX99231",
+    "اتصالات: نقاطك ستنتهي اليوم! استبدلها الآن: http://etisalat-points.localhost:8081/redeem",
+    "Fresh karak and paratha near Khalifa City, order now: http://karak-cafe.localhost:8081/",
+    "Check your traffic fines on the official site: https://www.adpolice.gov.ae and pay through TAMM: https://www.tamm.abudhabi"
+  ],
+  "urls": [
+    "http://consumer-protection-refund.localhost:8081/",
+    "https://u.ae/en/",
+    "https://www.aramex.com/"
+  ]
+}
