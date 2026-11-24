@@ -52,6 +52,7 @@ def fetch(url: str, user_agent: str) -> dict:
     # *.localhost names are our local TEST pages; connect to 127.0.0.1 and keep the Host header.
     if parts.hostname and parts.hostname.endswith(".localhost"):
         headers["Host"] = parts.netloc
+        headers["X-Kashshaf-Scan"] = "1"  # the TEST pages' simulated network block lets our own scans through
         target = urlunsplit((parts.scheme, f"127.0.0.1:{parts.port or 80}", parts.path or "/", parts.query, ""))
     req = urllib.request.Request(target, headers=headers)
     try:

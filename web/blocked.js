@@ -4,11 +4,22 @@
   const blocked = params.get("url") || decodeURIComponent(location.hash.slice(1)) || "";
   document.getElementById("url").textContent = blocked || "—";
 
+  // A victim reports the site with a verified identity (UAE PASS). Only on the server's page: the extension's copy has no link.
+  const report = document.getElementById("reportLink");
+  if (report && blocked) report.href = "/report/start?url=" + encodeURIComponent(blocked);
+  else if (report) report.closest(".report").style.display = "none";  // a style beats the hidden attribute
+
   // Suspicious, not yet confirmed: blocked as a precaution while an analyst reviews it.
   if (params.get("review") === "1") {
-    document.querySelector(".badge").textContent = "⏳ صفحة مشبوهة قيد المراجعة";
+    document.body.classList.add("review");
+    document.title = "موقع مشبوه قيد المراجعة | Under review";
+    document.querySelector(".badge").textContent = "⏳ موقع مشبوه · قيد المراجعة";
+    document.getElementById("title").textContent = "هذا الموقع مشبوه، وهو قيد المراجعة";
+    document.getElementById("status").hidden = false;
     document.getElementById("msg").textContent =
-      "أوقفنا فتح هذه الصفحة احترازياً لأنها مشبوهة، ويراجعها الآن مختصو شرطة أبوظبي. إذا تبيّن أنها آمنة سيُرفع الحظر عنها.";
+      "لم نتأكد بعد من أن هذا الموقع احتيالي، لكن فيه علامات مريبة، فحظرناه احترازياً لحمايتك. " +
+      "إذا تبيّن أنه آمن سيُرفع الحظر عنه، وإذا ثبت أنه احتيال يبقى محظوراً.";
+    document.querySelector(".en h2").textContent = "This site is suspicious and under review";
     document.querySelector(".en p").textContent =
       "We stopped this page as a precaution because it looks suspicious. Abu Dhabi Police analysts are reviewing it now; if it proves safe, the block will be lifted.";
   }

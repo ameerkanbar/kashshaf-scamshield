@@ -41,6 +41,13 @@
   const VCOLOR = { fraud: "#d03b3b", suspicious: "#ec835a", official: "#2a78d6", safe: "#0ca30c", unreachable: "#7d8794" };
   const pill = (v) => `<span class="pill v-${esc(v)}">${esc(t("v." + v))}</span>`;
   const src = (s) => esc(t("src." + s));
+  // What the agent saw in the screenshot, and how closely the page looks like the official site.
+  const visualBox = (ai) => {
+    if (!ai || (ai.visual_similarity == null && !ai.visual_notes_ar && !ai.visual_notes_en)) return "";
+    const n = ai.visual_similarity, notes = ai[`visual_notes_${lang}`] || ai.visual_notes_ar || ai.visual_notes_en || "";
+    return `<div class="visual-box"><b>${esc(t("vis.title"))}:</b> <span dir="auto">${esc(notes)}</span>
+      ${n != null ? `<div class="sim"><span>${esc(t("vis.sim"))}</span><span class="sim-bar"><i style="width:${Number(n)}%"></i></span><b class="num">${Number(n)}%</b></div>` : ""}</div>`;
+  };
   const time = (v) => {
     if (!v) return "";
     const d = typeof v === "number" ? new Date(v * 1000) : new Date(v);
@@ -58,11 +65,30 @@
   /* ---------------- auth ---------------- */
   const cfg = await fetch("/api/config").then((r) => r.json());
   const sb = supabase.createClient(cfg.supabase_url, cfg.supabase_key);
-  let session = (await sb.auth.getSession()).data.session;
-  sb.auth.onAuthStateChange((_e, s) => { session = s; });
+  // UAE PASS sign-in comes back as #session=… or #login_error=…: keep the session, then clean the address bar.
+  const KSF_KEY = "kashshaf.session";
+  const back = new URLSearchParams(location.hash.slice(1));
+  const loginError = back.get("login_error");
+  if (back.get("session")) { try { localStorage.setItem(KSF_KEY, back.get("session")); } catch { /* storage off */ } }
+  if (back.has("session") || back.has("login_error")) history.replaceState(null, "", location.pathname);
+  function ksfSession() {
+    let token = null;
+    try { token = localStorage.getItem(KSF_KEY); } catch { return null; }
+    if (!token) return null;
+    try {
+      const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+      const p = JSON.parse(new TextDecoder().decode(bytes));
+      if (p.exp * 1000 < Date.now()) return null;
+      return { access_token: token, ksf: true, user: { email: p.email, name: p.name_ar, name_en: p.name_en } };
+    } catch { return null; }
+  }
+  function dropKsf() { try { localStorage.removeItem(KSF_KEY); } catch { /* storage off */ } }
+  let session = ksfSession() || (await sb.auth.getSession()).data.session;
+  sb.auth.onAuthStateChange((_e, s) => { if (!session?.ksf) session = s; }); // a UAE PASS session is ours, not Supabase's
   async function api(path, body) {
     const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: body ? JSON.stringify(body) : undefined });
-    if (res.status === 401) { showLogin(); throw new Error(t("err.session")); }
+    if (res.status === 401) { if (session?.ksf) { dropKsf(); session = null; } showLogin(); throw new Error(t("err.session")); }
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -71,7 +97,8 @@
   function showLogin() { timers.forEach(clearInterval); timers = []; $("#app").hidden = true; $("#login").hidden = false; }
   function showApp() {
     $("#login").hidden = true; $("#app").hidden = false;
-    $("#userEmail").textContent = session.user.email; $("#avatar").textContent = session.user.email[0];
+    const who = session.ksf ? `${(lang === "en" && session.user.name_en) || session.user.name || session.user.email} · UAE PASS` : session.user.email;
+    $("#userEmail").textContent = who; $("#avatar").textContent = (who || "?")[0];
     route(); refreshState(); timers.forEach(clearInterval);
     let tick = 0; // the live view refreshes every 1.5 s, the other pages every 3 s
     timers = [setInterval(() => { tick++; if (page === "live" || tick % 2 === 0) refreshState(); }, 1500), setInterval(() => loadPage(true), 6000)];
@@ -83,7 +110,7 @@
     if (error) { $("#loginError").textContent = t("login.error"); return; }
     session = data.session; $("#password").value = ""; showApp();
   });
-  $("#logout").onclick = async () => { await sb.auth.signOut(); session = null; showLogin(); };
+  $("#logout").onclick = async () => { dropKsf(); await sb.auth.signOut(); session = null; showLogin(); }; // end both kinds of session
 
   /* ---------------- routing ---------------- */
   const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "review", "blocked", "gangs", "discover", "agents", "audit"];
@@ -288,6 +315,7 @@
         const s = st?.stats || {};
         fillKpis($("#anKpis"), [kpi("list", ins.total, t("kpi.urls")), kpi("alert", ins.verdicts.fraud || 0, t("kpi.fraud"), "", "danger"),
           kpi("block", s.blocked ?? 0, t("kpi.blocked"), "", "danger"), kpi("review", s.review ?? 0, t("kpi.review"), t("kpi.review.d"), "warn"),
+          kpi("users", s.reports ?? 0, t("kpi.reports"), t("kpi.reports.d"), "danger"),
           kpi("hand", ins.protected_clicks, t("kpi.protected"), t("kpi.protected.d"), "good")]);
         analyticsCharts();
       }
@@ -312,7 +340,7 @@
     <td>${time(f.created_at)}</td>
     <td><span class="url">${esc(f.url)}</span><div class="sub">${esc(f.title || "")}</div></td>
     <td>${esc(ent(f) || "—")}</td>
-    <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div></td>
+    <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div>${f.reports ? `<div class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</div>` : ""}</td>
     <td>${f.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span><div class="sub">${t("rev.pendingSub")}</div>` : f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("rev.decided", { d: t("rev.d." + (f.override === "block" ? "block" : "allow")) })}</div>` : ""}</td>
     <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
   async function loadFindings() {
@@ -589,6 +617,7 @@
         return `<div class="scan-link ${esc(v.verdict)}"><div class="head">${pill(v.verdict)}<b class="num">${v.score}/100</b>${v.blocked ? `<span class="tag red">${t("blockedTag")}</span>` : ""}${v.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}${fromDb.has(x.url_id) ? `<span class="tag">${t("scan.fromdb")}</span>` : ""}</div>
           <span class="url">${esc(x.url)}</span><p class="muted">${esc(e)}${e ? " · " : ""}${time(v.created_at)}${by(v) ? " · " + esc(by(v)) : ""}</p>
           ${v.ai?.[`summary_${lang}`] ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`])}</div>` : ""}
+          ${visualBox(v.ai)}
           ${(v.reasons || []).length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(r[lang] || r.ar)}</li>`).join("")}</ul>` : ""}
           <div class="row"><button class="btn outline sm" data-open="${x.url_id}" type="button">${t("details")}</button>${v.blocked ? `<a class="btn outline sm" href="/blocked?url=${encodeURIComponent(x.url)}" target="_blank" rel="noopener">${t("d.warn")}</a>` : ""}</div></div>`;
       }).join("")}`;
@@ -604,7 +633,7 @@
       <div class="result-main"><span class="url">${esc(f.url)}</span>${f.title ? `<div class="result-title">${esc(f.title)}</div>` : ""}
         <div class="result-meta"><span><span class="muted">${esc(t("col.entity"))}:</span> ${esc(ent(f) || "—")}</span>
           <span><span class="muted">${esc(t("col.source"))}:</span> ${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("") || "—"} <span class="muted">· ${t("sightings", { n: f.sightings })}</span></span>
-          <span>${time(f.created_at)}</span></div></div>
+          <span>${time(f.created_at)}</span>${f.reports ? `<span class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</span>` : ""}</div></div>
       <div class="result-side"><div><span class="pending">⏳ ${esc(t("rev.pending"))}</span><div class="muted">${esc(t("rev.pendingSub"))}</div></div>
         <button class="btn outline sm" data-open="${f.url_id}" type="button">${esc(t("rev.evidence"))}</button>${decisionButtons(f.domain, f.claimed_entity_id)}</div></article>`;
   async function loadReview() {
@@ -700,7 +729,7 @@
   // ---- evidence (upstream): screenshot, WHOIS, hosting, hashes; the pack and the printable report ----
   async function apiRaw(path, body) {
     const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: body ? JSON.stringify(body) : undefined });
-    if (res.status === 401) { showLogin(); throw new Error(t("err.session")); }
+    if (res.status === 401) { if (session?.ksf) { dropKsf(); session = null; } showLogin(); throw new Error(t("err.session")); }
     if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error || m; } catch { /* not JSON */ } throw new Error(m); }
     return res;
   }
@@ -766,13 +795,15 @@
     $("#detailBody").innerHTML = `<div class="detail-head"><div>${pill(v.verdict || "unreachable")} <span class="u">${esc(d.url.url)}</span></div><button class="btn ghost-dark sm" id="closeDetail" type="button">${t("close")}</button></div>
       <div class="detail-body">
         <p class="muted">${t("d.meta", { s: v.score ?? "—", m: esc(v.model === "rules" || v.model === "database" ? t("by." + v.model) : v.model || t("by.registry")), t: "" })}${time(v.created_at)} · ${esc(s.agent || "")} · ${t("d.firstSeen")} ${time(d.url.first_seen)}${s.domain_created ? ` · ${t("d.domainAge")} ${esc(s.domain_created)}` : ""}</p>
-        ${v.ai ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`] || v.ai.summary_ar)}</div>` : ""}
+        ${v.ai?.summary_ar || v.ai?.summary_en ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`] || v.ai.summary_ar)}</div>` : ""}
+        ${visualBox(v.ai)}
         <h4>${t("d.reasons")}</h4><ul class="reasons">${(v.reasons || []).map((r) => `<li>${esc(r[lang] || r.ar)}${r.points ? ` <b class="num">(+${r.points})</b>` : ""}<span class="en">${esc(lang === "ar" ? r.en : r.ar)}</span></li>`).join("")}</ul>
         <h4>${t("d.views")} ${s.cloaked ? `<span class="pill v-fraud">${t("cloakTag")}</span>` : ""}</h4>
         <div class="views"><div><h5>${icon("scan")} ${t("d.phone")}</h5><b>${esc(pv.title || "")}</b><p dir="auto">${esc((pv.text || pv.error || "").slice(0, 1200))}</p></div>
           <div><h5>${icon("eye")} ${t("d.scanner")}</h5><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div></div>
         <h4>${t("d.fp")}</h4><div>${d.fingerprints.map((f) => `<span class="tag u">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || `<span class="muted">${t("none")}</span>`}</div>
         <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
+        <h4>${t("rep.title")}</h4><div id="reportsBox"><p class="muted"><span class="spin"></span> ${t("loading")}</p></div>
         <h4>${t("ev.title")}</h4><div id="evidenceBox" class="evidence"><p class="muted"><span class="spin"></span> ${t("ev.loading")}</p></div>
         <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn ok sm" data-ov="allow" type="button">${t("d.allow")}</button>
           ${v.claimed_entity_id ? `<button class="btn outline sm" data-ov="official" type="button">${t("d.official")}</button>` : ""}
@@ -788,10 +819,30 @@
       $("#detailMsg").textContent = t("d.saved"); refreshState(); loadPage();
     }));
     loadEvidence(d.url.id);
+    loadReports(domain);
+  }
+
+  // ---- verified victim reports (UAE PASS) ----
+  async function loadReports(domain) {
+    const box = $("#reportsBox"); if (!box) return;
+    let rows;
+    try { rows = await api(`/api/reports?domain=${encodeURIComponent(domain)}`); } catch (err) { box.innerHTML = `<p class="msg err">${esc(err.message)}</p>`; return; }
+    if ($("#reportsBox") !== box) return; // another link was opened meanwhile
+    box.innerHTML = rows.length ? `<div class="reports-list">${rows.map((r) => `<div class="report-item">
+        <b>${esc((lang === "en" && r.reporter_name_en) || r.reporter_name_ar || "")}</b> <span class="verified">✓ ${esc(r.reporter_level)}</span>
+        <span class="muted small" dir="ltr">${esc(r.reporter_idn)}</span>
+        <div>${(r.what_happened || []).map((w) => `<span class="tag">${esc(t("rep.what." + w))}</span>`).join("")}
+          ${r.amount_aed != null ? ` <b class="num">${esc(t("rep.aed", { n: r.amount_aed }))}</b>` : ""}</div>
+        <div class="meta"><span>${time(r.created_at)}</span>
+          ${r.channel ? `<span>${esc(t("rep.via"))}: ${esc(t("rep.ch." + r.channel))}</span>` : ""}
+          ${r.contact_ok ? `<span>${esc(t("rep.contact"))}: <span dir="ltr">${esc(r.reporter_mobile || "")}</span></span>` : `<span>${esc(t("rep.noContact"))}</span>`}</div>
+        ${r.notes ? `<p class="muted" dir="auto">${esc(r.notes)}</p>` : ""}</div>`).join("")}</div>`
+      : `<p class="muted">${esc(t("rep.none"))}</p>`;
   }
 
   /* ---------------- start ---------------- */
   paintIcons(); applyLang();
-  if (session) { const { data } = await sb.auth.getUser(); if (!data?.user) session = null; }
+  if (session && !session.ksf) { const { data } = await sb.auth.getUser(); if (!data?.user) session = null; }
   session ? showApp() : showLogin();
+  if (loginError) $("#loginError").textContent = loginError === "cancelled" ? t("login.uaepassCancelled") : loginError === "failed" ? t("login.uaepassFailed") : loginError;
 })();

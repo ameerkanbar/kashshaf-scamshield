@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>بلاغ موثّق | شرطة أبوظبي · Verified report</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --navy:#082E6D; --blue:#135BA6; --red:#C2002F; --green:#0B7A53; --ink:#1d2939; --muted:#667085; --bg:#f2f4f7; --line:#e4e7ec; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:24px 16px;
+         background: linear-gradient(180deg, #135BA6 0%, #082E6D 100%); font-family: "Noto Kufi Arabic", Arial, sans-serif; color: var(--ink); }
+  .card { width:100%; max-width:600px; background:#fff; border-radius:20px; overflow:hidden; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+  .top { display:flex; align-items:center; gap:16px; padding:24px 28px 18px; border-bottom: 4px solid var(--blue); }
+  .org { font-size:20px; font-weight:700; color:#3F3E45; } .org small { display:block; font-size:13px; font-weight:500; opacity:.8; }
+  .content { padding: 22px 28px 26px; }
+  h1 { font-size:21px; margin: 0 0 8px; line-height:1.5; }
+  p { line-height:1.9; margin: 0 0 12px; color:#344054; }
+  .url { direction:ltr; text-align:left; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+         font:13px/1.5 ui-monospace, Menlo, monospace; color:var(--red); word-break:break-all; margin:6px 0 16px; }
+  .who { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; background:#ECFDF3; border:1px solid #ABEFC6;
+         border-radius:12px; padding:12px 14px; margin: 4px 0 16px; }
+  .who b { display:block; } .who small { color: var(--muted); } .badge { color: var(--green); font-weight:700; font-size:13px; }
+  fieldset { border:1px solid var(--line); border-radius:12px; padding: 10px 14px 12px; margin: 0 0 14px; }
+  legend { font-weight:700; padding: 0 6px; }
+  .opt { display:flex; align-items:center; gap:8px; margin: 6px 0; cursor:pointer; }
+  label.field { display:block; font-weight:600; margin: 0 0 12px; }
+  input[type=number], select, textarea { width:100%; margin-top:6px; padding:10px 12px; border:1px solid #d0d5dd; border-radius:10px;
+         font: inherit; font-weight: 400; background:#fff; }
+  textarea { min-height: 84px; resize: vertical; }
+  .btn { display:inline-block; width:100%; text-align:center; border:0; border-radius:12px; padding:14px; font-size:16px; font-weight:700;
+         cursor:pointer; font-family:inherit; text-decoration:none; background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; }
+  .btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid var(--blue); outline-offset:2px; }
+  .btn[disabled] { opacity:.6; cursor:wait; }
+  .error { color: var(--red); font-weight:600; }
+  .ref { font: 700 22px ui-monospace, Menlo, monospace; direction:ltr; color: var(--navy); }
+  .advice { background:#FFFAEB; border:1px solid #FEDF89; border-radius:12px; padding: 12px 18px; margin: 14px 0; }
+  .advice li { margin: 4px 0; line-height:1.8; }
+  .foot { text-align:center; font-size:12px; color:#98a2b3; padding: 0 28px 20px; }
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="top">
+    <svg width="52" height="52" viewBox="0 0 64 64" aria-hidden="true">
+      <path d="M32 4 8 13v17c0 15 10 26 24 30 14-4 24-15 24-30V13L32 4z" fill="#135BA6"/>
+      <path d="M32 9 13 16v14c0 12 8 21 19 25 11-4 19-13 19-25V16L32 9z" fill="#082E6D"/>
+      <path d="M22 32l7 7 14-15" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="org">شرطة أبوظبي<small>ABU DHABI POLICE</small></div>
+  </div>
+
+  <!-- Before UAE PASS (or after a cancel) -->
+  <section id="intro" class="content" hidden>
+    <h1>بلاغ موثّق عن موقع احتيال</h1>
+    <p>بلّغ شرطة أبوظبي عن هذا الموقع. نتحقق من هويتك عبر UAE PASS، فيصل بلاغك إلى المحلل مباشرة مع أدلة الموقع.</p>
+    <div class="url" id="introUrl"></div>
+    <p class="error" id="introMsg" role="alert"></p>
+    <a class="btn" id="startBtn" href="#">متابعة عبر UAE PASS</a>
+  </section>
+
+  <!-- After UAE PASS: the report form -->
+  <section id="form" class="content" hidden>
+    <h1>أخبرنا بما حدث</h1>
+    <div class="who">
+      <div><b id="who"></b><small dir="ltr" id="whoEn"></small></div>
+      <div><span class="badge">✓ هوية موثّقة عبر UAE PASS</span><br><small id="level"></small> · <small id="idn" dir="ltr"></small></div>
+    </div>
+    <p>الموقع الذي تبلّغ عنه:</p>
+    <div class="url" id="reportUrl"></div>
+    <form id="reportForm">
+      <fieldset>
+        <legend>ماذا فعلت في الموقع؟</legend>
+        <label class="opt"><input type="checkbox" name="what" value="card"> أدخلت بيانات بطاقتي البنكية</label>
+        <label class="opt"><input type="checkbox" name="what" value="otp"> أدخلت رمز التحقق (OTP)</label>
+        <label class="opt"><input type="checkbox" name="what" value="id"> أدخلت رقم الهوية أو بياناتي الشخصية</label>
+        <label class="opt"><input type="checkbox" name="what" value="password"> أدخلت كلمة مرور</label>
+        <label class="opt"><input type="checkbox" name="what" value="paid"> دفعت مبلغاً</label>
+        <label class="opt"><input type="checkbox" name="what" value="nothing"> لم أُدخل شيئاً، أبلّغ فقط</label>
+      </fieldset>
+      <label class="field">المبلغ المدفوع بالدرهم (إن وُجد)<input type="number" id="amount" min="0" step="0.01" inputmode="decimal" dir="ltr"></label>
+      <label class="field">كيف وصلك الرابط؟
+        <select id="channel">
+          <option value="">اختر</option><option value="sms">رسالة نصية</option><option value="whatsapp">واتساب</option>
+          <option value="email">بريد إلكتروني</option><option value="search">نتائج البحث</option><option value="ad">إعلان</option>
+          <option value="social">وسائل التواصل</option><option value="other">غير ذلك</option>
+        </select></label>
+      <label class="field">تفاصيل أخرى (اختياري)<textarea id="notes" maxlength="2000"></textarea></label>
+      <label class="opt"><input type="checkbox" id="contact"> أوافق على أن تتواصل معي الشرطة عبر هاتفي وبريدي في UAE PASS</label>
+      <p class="error" id="formMsg" role="alert"></p>
+      <button class="btn" type="submit" id="sendBtn">إرسال البلاغ</button>
+    </form>
+  </section>
+
+  <!-- Sent -->
+  <section id="done" class="content" hidden>
+    <h1>وصل بلاغك إلى شرطة أبوظبي</h1>
+    <p>رقم البلاغ، احتفظ به:</p>
+    <p class="ref" id="ref"></p>
+    <div class="advice"><b>ماذا تفعل الآن:</b><ul id="advice"></ul></div>
+    <p>للتواصل مع شرطة أبوظبي: خدمة أمان <b dir="ltr">8002626</b> · الطوارئ <b dir="ltr">999</b></p>
+  </section>
+  <div class="foot">كشّاف · Kashshaf</div>
+</main>
+<script src="report.js"></script>
+</body>
+</html>

@@ -35,6 +35,19 @@
            background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; font-family:inherit; }
   button:hover { background:var(--navy2); }
   button:focus-visible { outline:3px solid #135BA6; outline-offset:2px; }
+  .report { border:1px solid #fecdca; background:#fffbfa; border-radius:12px; padding:14px 18px; margin: 4px 0 18px; }
+  .report p { font-size:15px; margin: 6px 0 12px; }
+  .report-btn { display:block; text-align:center; border:2px solid var(--red); color:var(--red); border-radius:12px; padding:12px;
+                font-weight:700; text-decoration:none; }
+  .report-btn:hover { background:#fef3f2; } .report-btn:focus-visible { outline:3px solid #135BA6; outline-offset:2px; }
+  /* Suspicious, under review: amber instead of red, so it never reads as a confirmed fraud */
+  body.review { background: linear-gradient(180deg, #B54708 0%, #7A2E0E 100%); }
+  .review .top { border-bottom-color: #DC6803; }
+  .review .badge { background:#FFFAEB; color:#B54708; border-color:#FEDF89; }
+  .review .url { color:#B54708; }
+  .status { display:flex; flex-direction:column; gap:4px; background:#FFFAEB; border:1px solid #FEDF89; border-inline-start:4px solid #DC6803;
+            border-radius:10px; padding:12px 14px; margin: 0 0 14px; color:#7A2E0E; font-size:15px; line-height:1.8; }
+  .status[hidden] { display:none; }
   .closed { display:none; text-align:center; color:var(--muted); font-size:14px; margin-top:10px; }
   .foot { text-align:center; font-size:12px; color:#98a2b3; padding: 0 28px 20px; }
 </style>
@@ -53,6 +66,10 @@
   <div class="content">
     <span class="badge">⛔ صفحة احتيال محظورة</span>
     <h1 id="title">مرحباً، معك شرطة أبوظبي</h1>
+    <div class="status" id="status" hidden>
+      <b>الحالة: محظور مؤقتاً، قيد المراجعة</b>
+      <span>تتحقق الجهات المختصة في شرطة أبوظبي من هذا الموقع الآن. يبقى محظوراً حتى يصدر قرارها.</span>
+    </div>
     <p id="msg">قمنا بحظر هذه الصفحة لأنها صفحة احتيال. حمايتك تهمّنا، لذلك أوقفنا فتحها قبل أن تُدخل أي بيانات.</p>
     <div class="url" id="url" aria-label="الرابط المحظور"></div>
     <ul class="tips">
@@ -60,6 +77,12 @@
       <li>لا تُدخل بيانات بطاقتك أو رمز التحقق (OTP) إلا في المواقع والتطبيقات الرسمية.</li>
       <li>الجهات الرسمية لا تطلب منك الدفع عبر روابط في الرسائل.</li>
     </ul>
+
+    <div class="report">
+      <b>هل أدخلت بياناتك أو دفعت مبلغاً؟</b>
+      <p>بلّغ شرطة أبوظبي الآن. نتحقق من هويتك عبر UAE PASS، فيصل بلاغك إلى المحلل مباشرة مع أدلة الموقع.</p>
+      <a class="report-btn" id="reportLink" href="/report">بلاغ موثّق عبر UAE PASS · Report with UAE PASS</a>
+    </div>
 
     <div class="en">
       <h2>Hello from Abu Dhabi Police</h2>

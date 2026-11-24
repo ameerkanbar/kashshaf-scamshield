@@ -206,7 +206,16 @@ def findings(verdict: str | None = None, search: str | None = None, limit: int =
         params["verdict"] = f"eq.{verdict}"
     if search:
         params["or"] = f"(url.ilike.*{search}*,title.ilike.*{search}*)"
-    return supa.select("findings", **params)
+    rows = supa.select("findings", **params)
+    # verified victim reports per site (UAE PASS), shown on each result
+    counts: dict[str, int] = {}
+    for part in _chunks(sorted({r["domain"] for r in rows}), 50):
+        quoted = ",".join(f'"{d}"' for d in part)
+        for r in supa.select("citizen_reports", select="domain", domain=f"in.({quoted})"):
+            counts[r["domain"]] = counts.get(r["domain"], 0) + 1
+    for r in rows:
+        r["reports"] = counts.get(r["domain"], 0)
+    return rows
 
 
 def scan_result(ids: list[int]) -> list[dict]:
@@ -300,7 +309,7 @@ def stats() -> dict:
     jobs = {"urls": ("urls", {}), "queued": ("urls", {"status": "eq.queued"}), "checking": ("urls", {"status": "eq.checking"}),
             "fraud": ("domains", {"verdict": "eq.fraud"}), "suspicious": ("domains", {"verdict": "eq.suspicious"}),
             "safe": ("domains", {"verdict": "eq.safe"}), "official": ("domains", {"verdict": "eq.official"}),
-            "blocked": ("blocklist", {}), "review": ("review_queue", {}), "cloaked": ("scans", {"cloaked": "is.true"}), "messages": ("messages", {})}
+            "blocked": ("blocklist", {}), "review": ("review_queue", {}), "reports": ("citizen_reports", {}), "cloaked": ("scans", {"cloaked": "is.true"}), "messages": ("messages", {})}
     running = {k: _counts.submit(supa.count, table, **f) for k, (table, f) in jobs.items()}
     return {k: f.result() for k, f in running.items()}
 
@@ -372,7 +381,7 @@ def audit(actor: str, action: str, target: str | None = None, details: dict | No
 
 
 # "Most dangerous first" in the audit log: analyst decisions that change what is blocked, then errors.
-AUDIT_RISK = {"override_block": 2, "override_allow": 2, "override_clear": 2, "override_official": 2,
+AUDIT_RISK = {"override_block": 2, "override_allow": 2, "override_clear": 2, "override_official": 2, "citizen_report": 2, "login_denied": 1,
               "budget_reached": 1, "google_error": 1, "ct_error": 1, "scan_error": 1, "evidence_error": 1}
 
 
@@ -503,3 +512,26 @@ def import_result(import_id: int) -> dict:
                    "precision": precision, "recall": recall, "f1": f1, "accuracy": (tp + tn) / len(labelled)}
     return {"import": batch, "done": len(done), "total": len(rows), "counts": counts,
             "blocked": sum(1 for r in done if r["blocked"]), "metrics": metrics, "rows": rows}
+
+
+# ---- verified victim reports (UAE PASS) ---------------------------------------------------------
+def add_citizen_report(url_row: dict, url: str, who: dict, what: list[str], amount: float | None,
+                       channel: str | None, notes: str, contact_ok: bool) -> dict:
+    """Keep what a case needs; the phone and email only when the person agreed to be contacted."""
+    return supa.insert("citizen_reports", {
+        "url_id": url_row["id"], "url": url, "domain": url_row["domain"],
+        "reporter_uuid": who.get("uuid") or who["sub"], "reporter_name_ar": who.get("fullnameAR"),
+        "reporter_name_en": who.get("fullnameEN"), "reporter_idn": who.get("idn"), "reporter_level": who["userType"],
+        "reporter_mobile": who.get("mobile") if contact_ok else None,
+        "reporter_email": who.get("email") if contact_ok else None,
+        "what_happened": what, "amount_aed": amount, "channel": channel, "notes": notes or None,
+        "contact_ok": contact_ok})[0]
+
+
+def citizen_reports(domain: str) -> list[dict]:
+    """A site's verified reports for analysts; the Emirates ID number stays masked on screen."""
+    from .uaepass import masked_idn
+    rows = supa.select("citizen_reports", domain=f"eq.{domain}", select="*", order="created_at.desc", limit="50")
+    for r in rows:
+        r["reporter_idn"] = masked_idn(r.get("reporter_idn"))
+    return rows
