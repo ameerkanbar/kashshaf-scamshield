@@ -114,6 +114,7 @@
     review: { "#reviewBody": () => skCards(3) },
     blocked: { "#blockedBody": () => skRows(8, 9) },
     gangs: { "#gangsList": () => skCards(2, true) },
+    registry: { "#regSum": () => skLine(40, "lg"), "#regList": () => skCards(6) },
     discover: { "#searchLogBody": () => skRows(6, 7) },
     audit: { "#auditBody": () => skRows(8, 4) },
     settings: { "#setSummary": () => skLine(45, "lg"), "#services": () => skCards(6), "#configBody": () => skRows(6, 2) },
@@ -185,7 +186,7 @@
   new ResizeObserver(navEdges).observe($("#nav")); // also when the menu opens on a phone or the window changes
 
   /* ---------------- routing ---------------- */
-  const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "review", "blocked", "gangs", "discover", "agents", "audit"];
+  const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "review", "blocked", "gangs", "registry", "discover", "agents", "audit"];
   let page = "ops";
   function route() {
     const p = location.hash.slice(1);
@@ -394,6 +395,7 @@
       if (p === "findings" && !(poll && document.activeElement === $("#search"))) await loadFindings();
       if (p === "blocked") await loadBlocked();
       if (p === "gangs") await loadGangs();
+      if (p === "registry" && !poll) await loadRegistry();
       if (p === "discover") { renderDiscoverState(); await loadSearchLog(); }
       if (p === "agents") renderAgents();
       if (p === "org") renderOrg();
@@ -709,6 +711,34 @@
       <td class="num">${a.done}</td><td>${a.hits ? `<span class="blocked">${a.hits}</span>` : 0}</td><td>${clipUrl(a.job || "", 36)}</td><td>${time(a.since) || "—"}</td><td>${time(a.last_done) || "—"}</td></tr>`).join("");
     paintIcons($("#agKpis"));
   }
+
+  // ---- official registry: every body, its official domains and numbers, and where each number was read ----
+  let registryRows = [];
+  // stored digits shown the way people write them: 800 3333 · 600 52 5500 · 02 446 1461 · 055 567 8155
+  const showPhone = (d) => (d.length <= 4 ? d : /^800/.test(d) ? `800 ${d.slice(3)}` : /^600/.test(d) && d.length === 9 ? `600 ${d.slice(3, 5)} ${d.slice(5)}`
+    : d.length === 8 ? `0${d[0]} ${d.slice(1, 4)} ${d.slice(4)}` : d.length === 9 && d[0] === "5" ? `0${d.slice(0, 2)} ${d.slice(2, 5)} ${d.slice(5)}` : d);
+  const srcLink = (src) => { const m = /^https?:\/\/[^\s)]+/.exec(src || ""); return m ? `<a href="${esc(m[0])}" target="_blank" rel="noopener noreferrer" class="u">${esc(new URL(m[0]).hostname.replace(/^www\./, ""))}</a>` : esc(src || "—"); };
+  async function loadRegistry() { registryRows = await api("/api/registry"); renderRegistry(); }
+  function renderRegistry() {
+    const raw = ($("#regSearch").value || "").trim().toLowerCase();
+    // a number typed any way (+971 2 446 1461, 00971..., 02-4461461) is searched the way numbers are stored
+    let q = raw.replace(/[\s\-+()]/g, "");
+    if (/^\d+$/.test(q)) { if (q.startsWith("00")) q = q.slice(2); if (q.startsWith("971") && q.length >= 10) q = q.slice(3); q = q.replace(/^0+/, ""); }
+    const match = (e) => !q || [e.name_en, e.name_ar, ...e.domains, ...e.phones.map((p) => p.phone + " " + (p.label || ""))]
+      .some((x) => String(x).toLowerCase().replace(/[\s\-+()]/g, "").includes(q));
+    const rows = registryRows.filter(match);
+    const nums = registryRows.reduce((n, e) => n + e.phones.length, 0), withNums = registryRows.filter((e) => e.phones.length).length;
+    $("#regSum").innerHTML = `<span><b class="num">${registryRows.length}</b> ${esc(t("reg.bodies"))}</span><span><b class="num">${withNums}</b> ${esc(t("reg.withNums"))}</span><span><b class="num">${nums}</b> ${esc(t("reg.numbers"))}</span>`;
+    $("#regList").innerHTML = rows.map((e) => `<article class="card reg-card">
+        <div class="reg-head"><div><h3>${esc(lang === "en" ? e.name_en : e.name_ar)}</h3><p class="muted">${esc(lang === "en" ? e.name_ar : e.name_en)}</p></div>
+          <span class="pill ${e.phones.length ? "v-official" : "v-unreachable"}">${e.phones.length ? esc(t("reg.count", { n: e.phones.length })) : esc(t("reg.none"))}</span></div>
+        <div class="reg-domains">${e.domains.map((d) => `<span class="tag u">${esc(d)}</span>`).join("") || "—"}</div>
+        ${e.phones.length ? `<ul class="reg-phones">${e.phones.map((p) => `<li><b class="reg-num" dir="ltr">${esc(showPhone(p.phone))}</b>
+            <span class="reg-label">${esc(p.label || "")}</span><span class="reg-src">${srcLink(p.source)}</span></li>`).join("")}</ul>`
+          : `<p class="muted reg-empty">${esc(t("reg.noneNote"))}</p>`}
+      </article>`).join("") || `<div class="card empty">${esc(t("noResults"))}</div>`;
+  }
+  $("#regSearch").addEventListener("input", renderRegistry);
 
   // audit
   async function loadAudit() {

@@ -134,6 +134,24 @@ def for_url(url_id: int) -> list[dict]:
     return out
 
 
+def registry_view() -> list[dict]:
+    """Every official body with its domains and its official numbers (label and the page each was read on),
+    for the Official registry page."""
+    try:
+        rows = supa.select("official_phones", select="*", order="phone")
+    except supa.SupabaseError:
+        rows = []
+    by: dict[str, list] = {}
+    for r in rows:
+        by.setdefault(r["entity_id"], []).append({"phone": r["phone"], "label": r.get("label"), "source": r.get("source"),
+                                                  "verified": r.get("verified")})
+    out = []
+    for e in store.registry()["entities"]:
+        out.append({"id": e["id"], "name_en": e["name_en"], "name_ar": e["name_ar"], "category": e.get("category"),
+                    "domains": sorted(e.get("domains") or []), "phones": by.get(e["id"], [])})
+    return sorted(out, key=lambda x: (not x["phones"], x["name_en"].lower()))  # bodies with numbers first
+
+
 def listing(limit: int = 100) -> list[dict]:
     """Fake support lines for the dashboard, newest first, with the body's official numbers beside them."""
     try:

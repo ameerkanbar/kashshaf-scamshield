@@ -268,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(store.audit_log(40, ["google_search", "phish_feed", "ct_logs", "budget_reached",
                                                       "google_error", "search_stop", "patrol_start"], sort))
             return self.json(store.audit_log(sort=sort))
+        if path == "/api/registry":  # official bodies: their domains and their official numbers, with sources
+            return self.json(phones.registry_view())
         if path == "/api/fake_phones":  # Maps places named like an official body, with a number that is not theirs
             return self.json(phones.listing(int(q.get("limit", "100"))))
         if path == "/api/keys":  # Settings -> Keys: which keys are set (secrets: only the last 4 characters)

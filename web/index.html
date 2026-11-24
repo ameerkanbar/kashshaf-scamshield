@@ -62,6 +62,7 @@
       <a href="#review" data-page="review"><i data-icon="review"></i><span data-i18n="nav.review"></span><em class="count warn" id="navReview"></em></a>
       <a href="#blocked" data-page="blocked"><i data-icon="block"></i><span data-i18n="nav.blocked"></span><em class="count" id="navBlocked"></em></a>
       <a href="#gangs" data-page="gangs"><i data-icon="link"></i><span data-i18n="nav.gangs"></span></a>
+      <a href="#registry" data-page="registry"><i data-icon="shield"></i><span data-i18n="nav.registry"></span></a>
       <span class="nav-group" data-i18n="nav.system"></span>
       <a href="#discover" data-page="discover"><i data-icon="globe"></i><span data-i18n="nav.discover"></span></a>
       <a href="#agents" data-page="agents"><i data-icon="users"></i><span data-i18n="nav.agents"></span></a>
@@ -270,6 +271,15 @@
       </section>
 
       <!-- Gangs -->
+      <section data-view="registry" hidden>
+        <div class="card reg-top">
+          <div class="filters"><div class="search"><i data-icon="search"></i><input id="regSearch" type="search" data-i18n-ph="reg.search" dir="auto"></div></div>
+          <p class="note" data-i18n="reg.note"></p>
+          <div class="reg-sum" id="regSum"></div>
+        </div>
+        <div class="reg-grid" id="regList"></div>
+      </section>
+
       <section data-view="gangs" hidden>
         <p class="note" data-i18n="gangs.note"></p>
         <div class="gangs" id="gangsList"></div>
