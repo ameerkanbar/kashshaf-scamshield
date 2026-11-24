@@ -164,3 +164,72 @@ def listing(limit: int = 100) -> list[dict]:
         e = reg.get(r["entity_id"]) or {}
         r.update(entity_en=e.get("name_en"), entity_ar=e.get("name_ar"), official=sorted(nums.get(r["entity_id"], ())))
     return rows
+
+
+CATEGORIES = ("government", "police", "bank", "telecom", "transport", "utility", "courier", "airline", "energy", "other")
+_DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
+
+
+def add_body(data: dict, actor: str) -> dict:
+    """An analyst adds an official body by hand: its names, domains and official numbers.
+    Raises ValueError with a message for the analyst (Arabic | English) when something is wrong."""
+    name_ar, name_en = (data.get("name_ar") or "").strip(), (data.get("name_en") or "").strip()
+    if not name_ar or not name_en:
+        raise ValueError("اكتب اسم الجهة بالعربية والإنجليزية | Enter the body's name in Arabic and English")
+    category = data.get("category") if data.get("category") in CATEGORIES else "other"
+    domains = []
+    for d in data.get("domains") or []:
+        d = re.sub(r"^https?://", "", (d or "").strip().lower()).split("/")[0].removeprefix("www.")
+        if not d:
+            continue
+        if not _DOMAIN.match(d):
+            raise ValueError(f"نطاق غير صحيح: {d} | Not a valid domain: {d}")
+        domains.append(d)
+    if not domains:
+        raise ValueError("أضف نطاقاً رسمياً واحداً على الأقل | Add at least one official domain")
+    reg = store.registry()
+    for d in domains:
+        owner = reg["domains"].get(d)
+        if owner:
+            e = next((x for x in reg["entities"] if x["id"] == owner), {})
+            raise ValueError(f"النطاق {d} مسجّل لجهة أخرى: {e.get('name_ar', owner)} | {d} already belongs to {e.get('name_en', owner)}")
+    phones = []
+    for p in data.get("phones") or []:
+        num = normalize(p.get("phone") or "")
+        if not num:
+            continue
+        if not 3 <= len(num) <= 12:
+            raise ValueError(f"رقم غير صحيح: {p.get('phone')} | Not a valid number: {p.get('phone')}")
+        phones.append({"phone": num, "label": (p.get("label") or "").strip()[:80] or None})
+    source = (data.get("source") or "").strip()[:300]
+    if phones and not re.match(r"^https?://", source):
+        raise ValueError("للأرقام: أضف رابط صفحة الموقع الرسمي التي قرأتها منها | For numbers, add the link of the official page they are on")
+
+    base = re.sub(r"[^a-z0-9]+", "_", name_en.lower()).strip("_")[:40] or "body"
+    ids = {e["id"] for e in reg["entities"]}
+    entity_id, n = base, 2
+    while entity_id in ids:
+        entity_id, n = f"{base}_{n}", n + 1
+    # Words for the rules and the agent: the names, and each domain's name part when it is long enough to be a brand
+    # (rta.ae -> "rta" is too short and would match other words; dubaipolice.gov.ae -> "dubaipolice").
+    tokens = sorted({d.split(".")[0] for d in domains if len(d.split(".")[0]) >= 5})
+    supa.insert("entities", {"id": entity_id, "name_en": name_en, "name_ar": name_ar, "category": category,
+                             "keywords": [name_en.lower(), name_ar], "brand_tokens": tokens}, returning=False)
+    by = f"analyst {actor}"
+    supa.insert("official_domains", [{"domain": d, "entity_id": entity_id, "verified": False, "source": by}
+                                     for d in domains], returning=False)
+    if phones:
+        supa.insert("official_phones", [{**p, "entity_id": entity_id, "verified": False, "source": f"{source} ({by})"}
+                                        for p in phones], on_conflict="phone,entity_id", returning=False)
+    store.registry_changed()
+    with _lock:
+        _cache["at"] = 0
+    # Links on these domains that were already judged are checked again, now as official.
+    rechecked = 0
+    for d in domains:
+        for row in supa.select("urls", select="*", domain=f"eq.{d}"):
+            store.requeue_url(row, priority=10)
+            rechecked += 1
+    store.audit(actor, "registry_add", ", ".join(domains),
+                {"entity": entity_id, "name_ar": name_ar, "name_en": name_en, "phones": [p["phone"] for p in phones]})
+    return {"id": entity_id, "domains": domains, "phones": len(phones), "rechecked": rechecked}

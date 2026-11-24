@@ -280,8 +280,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"services": health.check(), "settings": health.settings()})
         if path == "/api/insights":
             return self.json(store.insights())
-        if path == "/api/registry":
-            return self.json(store.registry()["entities"])
         return self.json({"error": "not found"}, 404)
 
     def route_post(self):
@@ -410,6 +408,13 @@ class Handler(BaseHTTPRequestHandler):
             pool.resize(int(data.get("count", config.AGENT_COUNT)))
             store.audit(actor, "agents_resize", None, {"count": data.get("count")})
             return self.json(pool.state())
+        if path == "/api/registry":  # an analyst adds an official body by hand
+            try:
+                result = phones.add_body(data, actor)
+            except ValueError as e:
+                return self.json({"error": str(e)}, 400)
+            pool.notify()
+            return self.json(result)
         if path == "/api/override":
             action = data.get("action") or None
             if action not in (None, "block", "allow", "official") or not data.get("domain"):

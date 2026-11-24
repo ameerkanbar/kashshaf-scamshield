@@ -739,3 +739,15 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
 .hist-dlg .detail-head small { display: block; font-weight: 400; opacity: .85; font-size: 12px; margin-top: 2px; }
 #histBody tr.current td { background: var(--sky-2); }
 #importPanel .card-head { align-items: flex-start; gap: 12px; }
+
+/* Official registry: add a body by hand */
+.reg-dlg { width: min(720px, calc(100vw - 32px)); }
+.reg-dlg .detail-head small { display: block; font-weight: 400; opacity: .85; font-size: 12px; margin-top: 2px; }
+.reg-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+.reg-form select { display: block; width: 100%; margin-top: 6px; font-weight: 400; }
+.reg-phone-rows { display: grid; gap: 8px; margin: 6px 0 8px; }
+.reg-phone-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: center; font-weight: 400; }
+.reg-form-note { font-size: 12.5px; margin: 4px 0 8px; }
+.reg-form-actions { gap: 10px; justify-content: flex-start; }
+#regDone:empty, #regMsg:empty { display: none; }
+@media (max-width: 640px) { .reg-form-grid, .reg-phone-row { grid-template-columns: 1fr; } }

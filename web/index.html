@@ -274,9 +274,11 @@
       <!-- Gangs -->
       <section data-view="registry" hidden>
         <div class="card reg-top">
-          <div class="filters"><div class="search"><i data-icon="search"></i><input id="regSearch" type="search" data-i18n-ph="reg.search" dir="auto"></div></div>
+          <div class="filters"><div class="search"><i data-icon="search"></i><input id="regSearch" type="search" data-i18n-ph="reg.search" dir="auto"></div>
+            <button class="btn primary" id="regAddBtn" type="button" data-i18n="reg.add"></button></div>
           <p class="note" data-i18n="reg.note"></p>
           <div class="reg-sum" id="regSum"></div>
+          <p class="msg ok" id="regDone" role="status"></p>
         </div>
         <div class="reg-grid" id="regList"></div>
       </section>
@@ -328,6 +330,25 @@
 <dialog id="histDlg" class="detail hist-dlg" aria-labelledby="histTitle">
   <div class="detail-head"><div><b id="histTitle" data-i18n="imp.historyTitle"></b><small data-i18n="imp.historySub"></small></div><button class="btn ghost-dark sm" id="histClose" type="button" data-i18n="close"></button></div>
   <div class="detail-body"><div class="table-wrap"><table class="table"><thead><tr><th data-i18n="imp.hFile"></th><th data-i18n="imp.hBy"></th><th data-i18n="imp.hAt"></th><th data-i18n="imp.hLinks"></th><th></th></tr></thead><tbody id="histBody"></tbody></table></div></div>
+</dialog>
+<dialog id="regDlg" class="detail reg-dlg" aria-labelledby="regDlgTitle">
+  <div class="detail-head"><div><b id="regDlgTitle" data-i18n="reg.addTitle"></b><small data-i18n="reg.addSub"></small></div><button class="btn ghost-dark sm" id="regClose" type="button" data-i18n="close"></button></div>
+  <form class="detail-body reg-form" id="regForm" novalidate>
+    <div class="reg-form-grid">
+      <label class="field"><span data-i18n="reg.f.nameAr"></span><input id="regNameAr" dir="rtl" required maxlength="120"></label>
+      <label class="field"><span data-i18n="reg.f.nameEn"></span><input id="regNameEn" dir="ltr" required maxlength="120"></label>
+      <label class="field"><span data-i18n="reg.f.category"></span><select id="regCategory"></select></label>
+      <label class="field"><span data-i18n="reg.f.domains"></span><input id="regDomains" dir="ltr" placeholder="rta.ae, dubaipolice.gov.ae" required></label>
+    </div>
+    <div class="field"><span data-i18n="reg.f.phones"></span>
+      <div id="regPhones" class="reg-phone-rows"></div>
+      <button class="btn outline sm" id="regPhoneAdd" type="button" data-i18n="reg.f.phoneAdd"></button>
+    </div>
+    <label class="field"><span data-i18n="reg.f.source"></span><input id="regSource" dir="ltr" type="url" placeholder="https://"></label>
+    <p class="muted reg-form-note" data-i18n="reg.f.note"></p>
+    <p class="msg err" id="regMsg" role="alert"></p>
+    <div class="row reg-form-actions"><button class="btn primary" id="regSave" type="submit" data-i18n="reg.f.save"></button><button class="btn outline" id="regCancel" type="button" data-i18n="reg.f.cancel"></button></div>
+  </form>
 </dialog>
 <dialog id="keysDlg" class="detail keys-dlg" aria-labelledby="keysTitle">
   <div class="detail-head"><div><b id="keysTitle" data-i18n="keys.title"></b><small data-i18n="keys.sub"></small></div><button class="btn ghost-dark sm" id="keysClose" type="button" data-i18n="close"></button></div>

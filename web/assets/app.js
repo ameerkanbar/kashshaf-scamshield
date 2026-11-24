@@ -740,6 +740,49 @@
   }
   $("#regSearch").addEventListener("input", renderRegistry);
 
+  // an analyst adds an official body by hand: names, domains, numbers and the page the numbers are on
+  const REG_CATS = ["government", "police", "bank", "telecom", "transport", "utility", "courier", "airline", "energy", "other"];
+  const regPhoneRow = () => {
+    const row = document.createElement("div");
+    row.className = "reg-phone-row";
+    row.innerHTML = `<input class="rp-num" dir="ltr" inputmode="tel" placeholder="${esc(t("reg.f.phone"))}" maxlength="20"><input class="rp-label" dir="auto" placeholder="${esc(t("reg.f.label"))}" maxlength="80"><button class="btn outline sm" type="button">${esc(t("reg.f.remove"))}</button>`;
+    row.querySelector("button").onclick = () => row.remove();
+    $("#regPhones").appendChild(row);
+  };
+  const bilingual = (m) => { const [ar, en] = String(m).split(" | "); return (lang === "en" && en) || ar; };
+  $("#regAddBtn").onclick = () => {
+    $("#regForm").reset();
+    $("#regMsg").textContent = "";
+    $("#regCategory").innerHTML = REG_CATS.map((c) => `<option value="${c}">${esc(t("reg.cat." + c))}</option>`).join("");
+    $("#regPhones").innerHTML = "";
+    regPhoneRow();
+    $("#regDlg").showModal();
+    $("#regNameAr").focus();
+  };
+  $("#regPhoneAdd").onclick = regPhoneRow;
+  $("#regClose").onclick = $("#regCancel").onclick = () => $("#regDlg").close();
+  $("#regForm").onsubmit = async (e) => {
+    e.preventDefault();
+    $("#regMsg").textContent = "";
+    const body = {
+      name_ar: $("#regNameAr").value, name_en: $("#regNameEn").value, category: $("#regCategory").value,
+      domains: $("#regDomains").value.split(/[,\s،]+/).filter(Boolean), source: $("#regSource").value,
+      phones: [...$("#regPhones").children].map((r) => ({ phone: r.querySelector(".rp-num").value, label: r.querySelector(".rp-label").value })).filter((p) => p.phone.trim()),
+    };
+    $("#regSave").disabled = true;
+    try {
+      const r = await api("/api/registry", body);
+      $("#regDlg").close();
+      await loadRegistry();
+      $("#regSearch").value = ""; renderRegistry();
+      $("#regDone").textContent = t("reg.saved", { name: lang === "en" ? body.name_en : body.name_ar, d: r.domains.length, p: r.phones, r: r.rechecked });
+    } catch (err) {
+      $("#regMsg").textContent = bilingual(err.message);
+    } finally {
+      $("#regSave").disabled = false;
+    }
+  };
+
   // audit
   async function loadAudit() {
     const log = await api(`/api/audit?sort=${sort}`);

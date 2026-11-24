@@ -35,6 +35,11 @@ def registry() -> dict:
         return _registry
 
 
+def registry_changed() -> None:
+    """Reload the registry on the next read (after a body or a domain is added)."""
+    _registry["at"] = 0
+
+
 def host_of(url: str) -> str:
     return (urlsplit(url).hostname or "").lower().removeprefix("www.")
 
@@ -385,7 +390,7 @@ def audit(actor: str, action: str, target: str | None = None, details: dict | No
 
 
 # "Most dangerous first" in the audit log: analyst decisions that change what is blocked, then errors.
-AUDIT_RISK = {"override_block": 2, "override_allow": 2, "override_clear": 2, "override_official": 2, "citizen_report": 2, "login_denied": 1,
+AUDIT_RISK = {"override_block": 2, "override_allow": 2, "override_clear": 2, "override_official": 2, "registry_add": 2, "citizen_report": 2, "login_denied": 1,
               "budget_reached": 1, "google_error": 1, "ct_error": 1, "scan_error": 1, "evidence_error": 1}
 
 
