@@ -1,6 +1,6 @@
 # Kashshaf (كشّاف)
 
-**ScamShield AI hackathon (42 Abu Dhabi × Abu Dhabi Police), team Return 0:** Mohammad Amir Kanbar, Ahmad Abulaban, Anas Alhawamdeh.
+**ScamShield AI hackathon (42 Abu Dhabi × Abu Dhabi Police), team Return 0:** Mohammad Amir Knbar, Ahmad Abulaban, Anas Alhawamdeh.
 
 A fraud-link radar for Abu Dhabi Police. It finds scam links in Google results, ads, AI Overviews and
 Google Maps before people reach them, checks every one with a Claude agent against the official registry,
