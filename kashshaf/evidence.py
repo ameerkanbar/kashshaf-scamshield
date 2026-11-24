@@ -25,7 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlsplit
 
-from . import fetcher, store, supa
+from . import fetcher, phones, store, supa
 
 UAE = timezone(timedelta(hours=4))
 BUCKET = "evidence"
@@ -406,9 +406,18 @@ def gather(url_id: int) -> dict:
                      for x in ind["domains"]} - {url["domain"]})
     decisions = supa.select("audit_log", target=f"eq.{url['domain']}", action="like.override_*", select="*", order="at.asc")
     first = min([s["seen_at"] for s in d["sightings"]] + [url["first_seen"]])
+    # fake customer-service numbers Google Maps showed with this link (a place named like an official body)
+    try:
+        fakes = supa.select("fake_phones", url_id=f"eq.{url_id}", select="*", order="first_seen.asc")
+    except supa.SupabaseError:
+        fakes = []
+    official = phones.official_numbers()
+    for f in fakes:
+        f["official"] = sorted(official.get(f["entity_id"], ()))
+        f["entity"] = next((x for x in store.registry()["entities"] if x["id"] == f["entity_id"]), None)
     return {"url": url, "verdict": verdict, "domain": dom, "entity": entity, "evidence": latest(url_id),
             "sightings": d["sightings"], "fingerprints": [f["fingerprints"] for f in d["fingerprints"]],
-            "linked_domains": linked, "decisions": decisions, "first_seen": first,
+            "linked_domains": linked, "decisions": decisions, "first_seen": first, "fake_phones": fakes,
             "blocked": store.is_blocked(dom), "pending_review": store.pending_review(dom)}
 
 
@@ -481,7 +490,20 @@ def report_html(g: dict, by: str, screenshot: bytes | None) -> str:
     rows = lambda pairs: "".join(f"<tr><th>{k}</th><td>{val}</td></tr>" for k, val in pairs)  # noqa: E731
     ltr = lambda x: f'<span dir="ltr">{esc(x)}</span>'  # noqa: E731
     sightings = "".join(f"<li>{ltr(_uae(s['seen_at']))} · {esc(SOURCE_AR.get(s['source'], s['source']))}"
-                        f"{' · «' + esc(s['query']) + '»' if s.get('query') else ''}</li>" for s in g["sightings"][:15])
+                        f"{' · «' + esc(s['query']) + '»' if s.get('query') else ''}"
+                        f"{' · ' + esc((s.get('raw') or {}).get('title')) if s['source'] == 'maps' and (s.get('raw') or {}).get('title') else ''}"
+                        f"{' · هاتف ' + ltr(s['phone']) if s.get('phone') else ''}"
+                        f"{' · <b>رقم مزيّف</b>' if (s.get('raw') or {}).get('fake_phone') else ''}</li>" for s in g["sightings"][:15])
+    fake_rows = "".join(
+        f"<tr><td>{esc(f['place_name'])}</td><td>{ltr(f.get('phone_raw') or f['phone'])}</td>"
+        f"<td>{esc((f.get('entity') or {}).get('name_ar'))}<br><small>{esc((f.get('entity') or {}).get('name_en'))}</small></td>"
+        f"<td>{ltr(', '.join(f.get('official') or []))}</td><td>{esc(f.get('address'))}</td>"
+        f"<td>{esc(f.get('query'))}</td><td>{ltr(_uae(f.get('first_seen')))}<br>{esc(f.get('sightings'))} ×</td></tr>"
+        for f in g.get("fake_phones") or [])
+    fake_section = ("<h2>رقم خدمة عملاء مزيّف على خرائط جوجل · Fake customer-service number on Google Maps</h2>"
+                    "<p class=\"muted\">مكان على الخرائط اسمه ينتحل جهة رسمية، ورقمه ليس من أرقامها الرسمية المنشورة على موقعها.</p>"
+                    "<table><tr><th>اسم المكان</th><th>الرقم المعروض</th><th>الجهة المنتحَلة</th><th>أرقامها الرسمية</th>"
+                    f"<th>العنوان</th><th>البحث</th><th>أول ظهور · مرات</th></tr>{fake_rows}</table>") if fake_rows else ""
     decisions = "".join(f"<li>{ltr(_uae(a['at']))} · {esc(a['actor'])} · {esc(a['action'])}</li>" for a in g["decisions"])
     reasons = "".join(f"<li>{esc(r.get('ar'))}<br><small dir=\"ltr\">{esc(r.get('en'))}</small></li>"
                       for r in v.get("reasons") or [])
@@ -532,6 +554,7 @@ def report_html(g: dict, by: str, screenshot: bytes | None) -> str:
 ])}</table></div>
 
 <h2>أسباب الحكم</h2><ul>{reasons or '<li>—</li>'}</ul>
+{fake_section}
 {visual}
 
 <h2>تسجيل النطاق (WHOIS / RDAP)</h2>

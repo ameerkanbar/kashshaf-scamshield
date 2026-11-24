@@ -414,7 +414,7 @@
     <td>${time(f.created_at)}</td>
     <td>${clipUrl(f.url)}<div class="sub">${clip(f.title)}</div></td>
     <td>${clip(ent(f)) || "—"}</td>
-    <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div>${f.reports ? `<div class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</div>` : ""}</td>
+    <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}${(f.reasons || []).some((r) => r.by === "maps") ? `<span class="tag red">${esc(t("fake.tag"))}</span>` : ""}<div class="sub">${t("sightings", { n: f.sightings })}</div>${f.reports ? `<div class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</div>` : ""}</td>
     <td>${f.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span><div class="sub">${t("rev.pendingSub")}</div>` : f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("rev.decided", { d: t("rev.d." + (f.override === "block" ? "block" : "allow")) })}</div>` : ""}</td>
     <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
   let findingRows = [], findingsSeq = 0;
@@ -422,9 +422,23 @@
   async function loadFindings() {
     const seq = ++findingsSeq; // a slower, older load must never paint over a newer one (e.g. right after a decision)
     const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort });
-    const rows = await api(`/api/findings?${q}`);
+    const [rows, fakes] = await Promise.all([api(`/api/findings?${q}`), api("/api/fake_phones").catch(() => [])]);
     if (seq !== findingsSeq) return;
-    findingRows = rows; renderFindings();
+    findingRows = rows; renderFindings(); renderFakes(fakes);
+  }
+  // Google Maps places named like an official body, with a number that is not theirs (even with no website)
+  function renderFakes(rows) {
+    $("#fakeCard").hidden = !rows.length;
+    $("#fakeCount").textContent = rows.length;
+    $("#fakeBody").innerHTML = rows.map((f) => `<tr>
+      <td>${clip(f.place_name)}${f.address ? `<div class="sub">${clip(f.address)}</div>` : ""}</td>
+      <td><b class="fake-num" dir="ltr">${esc(f.phone_raw || f.phone)}</b><div class="sub"><span class="tag red">${esc(t("fake.tag"))}</span></div></td>
+      <td>${esc(lang === "en" ? f.entity_en || f.entity_ar : f.entity_ar || f.entity_en)}</td>
+      <td>${(f.official || []).length ? clip((f.official || []).join(" · "), { words: 4, chars: 40, cls: "u" }) : "—"}</td>
+      <td><span class="tag">${src("maps")}</span>${f.query ? `<div class="sub" dir="auto">«${clip(f.query, { words: 4 })}»</div>` : ""}</td>
+      <td>${time(f.last_seen)}<div class="sub">${esc(t("sightings", { n: f.sightings }))}</div></td>
+      <td>${f.url_id ? `<button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button>` : `<span class="sub">${esc(t("fake.noSite"))}</span>`}</td></tr>`).join("");
+    paintIcons($("#fakeCard"));
   }
   // An analyst's decision shows at once on every list, before the server answers; the reload then confirms it.
   function applyDecision(domain, action) {
@@ -960,7 +974,7 @@
         <div class="views"><div><h5>${icon("scan")} ${t("d.phone")}</h5><b>${esc(pv.title || "")}</b><p dir="auto">${esc((pv.text || pv.error || "").slice(0, 1200))}</p></div>
           <div><h5>${icon("eye")} ${t("d.scanner")}</h5><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div></div>
         <h4>${t("d.fp")}</h4><div>${d.fingerprints.map((f) => `<span class="tag u">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || `<span class="muted">${t("none")}</span>`}</div>
-        <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
+        <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""}${x.source === "maps" && x.raw?.title ? ` · ${esc(x.raw.title)}` : ""}${x.phone ? ` · <span dir="ltr">${esc(x.phone)}</span>` : ""}${x.raw?.fake_phone ? ` <span class="tag red">${esc(t("fake.tag"))}</span>` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
         <h4>${t("rep.title")}</h4><div id="reportsBox">${skList(2)}</div>
         <h4>${t("ev.title")}</h4><div id="evidenceBox" class="evidence" aria-busy="true">${skEvidence()}</div>
         <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn ok sm" data-ov="allow" type="button">${t("d.allow")}</button>

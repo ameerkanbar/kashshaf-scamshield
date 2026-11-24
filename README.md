@@ -87,6 +87,19 @@ The blocked-sites CSV carries the registrar, hosting and abuse contacts for bulk
   Set `UAEPASS_BASE_URL`, `UAEPASS_CLIENT_ID` and `UAEPASS_CLIENT_SECRET` to switch to UAE PASS staging or
   production, with no code change.
 
+## Fake customer-service numbers on Google Maps
+
+Every Maps place a search shows is checked, website or not. If its name presents it as an official body
+(the same whole-word matching the rules use; a short name must name the body with a phrase of two words or
+more, or next to a service word such as "customer service" or «خدمة العملاء») and its number is not one of
+that body's official numbers, it is a fake support line: kept in `fake_phones` and listed at the top of the
+Results page. When the place has a website, the link is checked first and the fake number is one more
+reason in its verdict (it is never simply "safe"), and the evidence pack shows the Maps source and the number.
+
+The official numbers (`supabase/migrations/0013_official_phones.sql`) were read on each body's own website,
+with the page in `source`. Numbers are compared normalised (`kashshaf/phones.py`: +971, 00971 and the leading
+0 removed, spaces and dashes ignored). A body with no number on record (Aramex publishes none) is never flagged.
+
 ## Importing a file of links
 
 On the «فحص رسالة أو رابط» page, drop a CSV, Excel (.xlsx), TXT or JSON file (up to 5000 links).

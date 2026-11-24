@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import config, control, health, store
+from . import config, control, health, phones, store
 
 LOCATION = "Abu Dhabi,Abu Dhabi,United Arab Emirates"
 
@@ -67,20 +67,46 @@ def search_google(query: str, *, persona: dict | None = None, hl: str = "en", ma
             return {"cached": True, "searched_at": prev["searched_at"], "new": prev["new_links"],
                     "known": prev["known_links"], "known_blocked": prev["known_blocked"], "queued": 0}
     pid = persona["id"] if persona else None
+    data = serp(query, hl=hl)
+    maps_data = serp(query, engine="google_maps", hl=hl) if maps else {}
+    counts, links = ingest(query, data, maps_data, persona_id=pid)
+    store.save_search(query, hl, "discovery", maps=maps, results=links[:60], by=by,
+                      new=counts["new"], known=counts["known"], known_blocked=counts["known_blocked"])
+    store.audit(by, "google_search", query, {"persona": pid, "queued": counts["new"], **counts})
+    return {"cached": False, "queued": counts["new"], **counts}
+
+
+def ingest(query: str, data: dict, maps_data: dict | None = None, *, persona_id: int | None = None) -> tuple[dict, list]:
+    """Queue every link a Google results page (and its Maps results) shows, and check every Maps place's
+    phone number against the official ones: a place named like an official body with a number that is not
+    theirs is a fake support line, kept even when the place has no website."""
     blocked = set(store.blocklist())
-    counts = {"new": 0, "known": 0, "known_blocked": 0}
+    counts = {"new": 0, "known": 0, "known_blocked": 0, "fake_phones": 0}
     links = []
 
-    def q(url, source, position=None, phone=None, raw=None):
+    def q(url, source, position=None, phone=None, raw=None, priority=None):
         if url and url.startswith(("http://", "https://")):
-            row = store.queue_url(url, source, query=query, persona_id=pid, position=position, phone=phone, raw=raw,
-                                  priority=5 if source in ("serp_ad", "serp_ai_overview") else 1)
+            row = store.queue_url(url, source, query=query, persona_id=persona_id, position=position, phone=phone, raw=raw,
+                                  priority=priority or (5 if source in ("serp_ad", "serp_ai_overview") else 1))
             counts["new" if row["_new"] else "known"] += 1
             if row["domain"] in blocked:
                 counts["known_blocked"] += 1
             links.append(url)
+            return row
+        return None
 
-    data = serp(query, hl=hl)
+    def place(p, position):
+        site = p.get("website") or (p.get("links") or {}).get("website")
+        title, phone = p.get("title") or "", p.get("phone")
+        fake = phones.check_place(title, phone)
+        # a fake support line jumps the queue: it is checked before ordinary results
+        row = q(site, "maps", position, phone, {"title": title, "address": p.get("address"),
+                                                **({"fake_phone": True, "entity_id": fake["entity"]["id"]} if fake else {})},
+                priority=8 if fake else None)
+        if fake:
+            counts["fake_phones"] += 1
+            phones.record(fake, {"title": title, "address": p.get("address"), "website": site}, query, row["id"] if row else None)
+
     for ad in data.get("ads", []) or []:
         q(ad.get("link"), "serp_ad", ad.get("position"), raw={"title": ad.get("title")})
     for r in data.get("organic_results", []) or []:
@@ -88,14 +114,10 @@ def search_google(query: str, *, persona: dict | None = None, hl: str = "en", ma
     for i, ref in enumerate((data.get("ai_overview") or {}).get("references", []) or []):
         q(ref.get("link"), "serp_ai_overview", i + 1, raw={"title": ref.get("title")})
     for i, p in enumerate(_places(data)):
-        site = p.get("website") or (p.get("links") or {}).get("website")
-        q(site, "maps", i + 1, p.get("phone"), {"title": p.get("title"), "address": p.get("address")})
-    if maps:
-        for i, p in enumerate(_places(serp(query, engine="google_maps", hl=hl))):
-            q(p.get("website"), "maps", i + 1, p.get("phone"), {"title": p.get("title"), "address": p.get("address")})
-    store.save_search(query, hl, "discovery", maps=maps, results=links[:60], by=by, **counts)
-    store.audit(by, "google_search", query, {"persona": pid, "queued": counts["new"], **counts})
-    return {"cached": False, "queued": counts["new"], **counts}
+        place(p, i + 1)
+    for i, p in enumerate(_places(maps_data or {})):
+        place(p, i + 1)
+    return counts, links
 
 
 def run_personas(limit_queries: int | None = None) -> int:

@@ -707,3 +707,9 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
   .table tr.sk-row td { display: block; }
   .table .decide { max-width: 220px; }
 }
+
+/* Fake customer-service numbers on Google Maps */
+.fake-card { border-inline-start: 4px solid var(--v-fraud); }
+.fake-card h3 { display: flex; align-items: center; gap: 6px; color: var(--red); }
+.fake-card h3 [data-icon] { width: 18px; height: 18px; }
+.fake-num { color: var(--red); font: 700 13px ui-monospace, Consolas, monospace; white-space: nowrap; }

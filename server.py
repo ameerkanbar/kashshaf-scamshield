@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from kashshaf import config  # loads .env first
-from kashshaf import agent, control, discovery, envfile, evidence, health, importer, org, pipeline, store, supa, uaepass
+from kashshaf import agent, control, discovery, envfile, evidence, health, importer, org, phones, pipeline, store, supa, uaepass
 from kashshaf.workers import Pool
 
 # What a victim can tell us in a verified report (the page shows the Arabic labels)
@@ -268,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(store.audit_log(40, ["google_search", "phish_feed", "ct_logs", "budget_reached",
                                                       "google_error", "search_stop", "patrol_start"], sort))
             return self.json(store.audit_log(sort=sort))
+        if path == "/api/fake_phones":  # Maps places named like an official body, with a number that is not theirs
+            return self.json(phones.listing(int(q.get("limit", "100"))))
         if path == "/api/keys":  # Settings -> Keys: which keys are set (secrets: only the last 4 characters)
             return self.json({"fields": envfile.status()})
         if path == "/api/integrations":  # Settings page: live status of every outside service

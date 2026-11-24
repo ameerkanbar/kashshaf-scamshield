@@ -9,7 +9,7 @@ from contextlib import nullcontext
 import threading
 from datetime import datetime, timedelta, timezone
 
-from . import agent, config, control, evidence, fetcher, org, rules, store, supa
+from . import agent, config, control, evidence, fetcher, org, phones, rules, store, supa
 
 UAE = timezone(timedelta(hours=4))  # Abu Dhabi time, no daylight saving
 RECHECK_MINUTES = (5, 15, 30)  # the AI service failed (overloaded, down): check the link again later
@@ -110,6 +110,14 @@ def inspect(url_row: dict, agent_name: str) -> dict:
 
     # Content, fingerprints and domain departments: the rules, each section in its department.
     ev = rules.evaluate(host, phone, bot, stage=stage)
+    # Google Maps showed this link under a place named like an official body, with a number that is not theirs:
+    # a fake customer-service line is one more reason, on top of what the page itself shows.
+    fake_lines = phones.for_url(url_row["id"])
+    if fake_lines:
+        ev["reasons"] = ev["reasons"] + fake_lines
+        ev["score"] = min(100, ev["score"] + sum(r["points"] for r in fake_lines))
+        if not ev["entity"]:
+            ev["entity"] = next((e for e in store.registry()["entities"] if e["id"] == fake_lines[0]["entity_id"]), None)
     if company:
         rs = ev["reasons"]
         content = [r for r in rs if not (r["en"].startswith("Sends stolen data") or r["en"].startswith("Domain registered")
@@ -180,6 +188,9 @@ def inspect(url_row: dict, agent_name: str) -> dict:
             ai={"summary_ar": result.get("summary_ar"), "summary_en": result.get("summary_en"), "trace": result.get("trace"),
                 "visual_similarity": result.get("visual_similarity"),
                 "visual_notes_ar": result.get("visual_notes_ar") or "", "visual_notes_en": result.get("visual_notes_en") or ""})
+    if fake_lines and verdict["verdict"] == "safe":
+        # a site advertised on Maps behind a fake support number of an official body is never simply safe
+        verdict.update(verdict="suspicious", score=max(verdict["score"] or 0, rules.SUSPICIOUS_AT))
 
     # Chief: the final verdict is saved and the domain blocked (fraud, or suspicious pending review).
     return finish(scan, verdict)

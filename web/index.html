@@ -248,6 +248,10 @@
 
       <!-- Findings -->
       <section data-view="findings" hidden>
+        <div class="card fake-card" id="fakeCard" hidden>
+          <div class="card-head"><div><h3><i data-icon="alert"></i> <span data-i18n="fake.title"></span></h3><p data-i18n="fake.sub"></p></div><span class="pill v-fraud" id="fakeCount"></span></div>
+          <div class="table-wrap"><table class="table"><thead><tr><th data-i18n="fake.place"></th><th data-i18n="fake.number"></th><th data-i18n="fake.entity"></th><th data-i18n="fake.official"></th><th data-i18n="col.source"></th><th data-i18n="fake.seen"></th><th></th></tr></thead><tbody id="fakeBody"></tbody></table></div>
+        </div>
         <div class="card">
           <div class="filters"><div class="search"><i data-icon="search"></i><input id="search" type="search" data-i18n-ph="f.search" dir="auto"></div>
             <select id="verdictFilter"><option value="" data-i18n="f.all"></option><option value="fraud" data-i18n="v.fraud"></option><option value="suspicious" data-i18n="v.suspicious"></option><option value="review" data-i18n="f.review"></option><option value="safe" data-i18n="v.safe"></option><option value="official" data-i18n="v.official"></option><option value="unreachable" data-i18n="v.unreachable"></option></select></div>
