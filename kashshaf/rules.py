@@ -4,12 +4,14 @@ Each signal adds points with a reason in Arabic and English. The agent sees
 these as evidence; when Claude is off, these rules decide alone.
 """
 import difflib
+import ipaddress
 import json
 import re
 import urllib.request
 from contextlib import nullcontext
 from datetime import date
 from html.parser import HTMLParser
+from urllib.parse import urlsplit
 
 from . import store
 
@@ -228,6 +230,95 @@ def evaluate(host: str, phone: dict, bot: dict, stage=None) -> dict:
                            "title": pv["title"], "text": pv["text"][:4000], "inputs": pv["inputs"]},
             "bot_view": {"final_url": bot.get("final_url"), "status": bot.get("status"), "error": bot.get("error"),
                          "title": bv["title"], "text": bv["text"][:1500]}}
+
+
+# ---- the link and its domain name alone, before (or without) opening the page --------------------------------
+# Brands phished worldwide, with their real domains. Public phishing lists are full of these, mostly dead by the
+# time they are checked: the name is then the only evidence left.
+GLOBAL_BRANDS = {
+    "paypal": ("paypal.com", "paypal.me"), "apple": ("apple.com", "icloud.com"), "appleid": ("apple.com",),
+    "icloud": ("icloud.com", "apple.com"),
+    "microsoft": ("microsoft.com", "live.com", "office.com", "microsoftonline.com", "outlook.com", "sharepoint.com"),
+    "office365": ("office.com", "microsoft.com"), "outlook": ("outlook.com", "live.com", "office.com"),
+    "netflix": ("netflix.com",), "amazon": ("amazon.com", "amazon.ae", "amazon.co.uk", "amazonaws.com"),
+    "dhl": ("dhl.com", "dhl.ae"), "fedex": ("fedex.com",), "ups": ("ups.com",), "usps": ("usps.com",),
+    "whatsapp": ("whatsapp.com", "whatsapp.net", "wa.me"), "facebook": ("facebook.com", "fb.com"),
+    "instagram": ("instagram.com",), "binance": ("binance.com",), "coinbase": ("coinbase.com",),
+    "metamask": ("metamask.io",), "ebay": ("ebay.com",), "adobe": ("adobe.com",), "docusign": ("docusign.com", "docusign.net"),
+    "dropbox": ("dropbox.com",), "linkedin": ("linkedin.com",), "wellsfargo": ("wellsfargo.com",), "chase": ("chase.com",),
+    "steamcommunity": ("steamcommunity.com",), "roblox": ("roblox.com",), "gmail": ("google.com", "gmail.com"),
+}
+LURE_WORDS = ("login", "signin", "sign-in", "verify", "verification", "secure", "security", "account", "update",
+              "confirm", "unlock", "suspend", "suspended", "billing", "refund", "payment", "wallet", "recover", "reactivate")
+RISKY_TLDS = ("xyz", "top", "cfd", "sbs", "click", "icu", "buzz", "monster", "cyou", "bond", "rest", "quest", "gq",
+              "tk", "ml", "cf", "ga", "zip", "mov", "lol", "work", "support", "help", "country", "kim", "loan", "live")
+
+
+def _has_token(host: str, token: str) -> bool:
+    """A brand token as a whole part of the name (adpolice-fines.pay, paypal.secure-x.com), so 'ups' does not
+    match 'groups' and 'tamm' does not match 'tammam'; longer tokens may also sit inside a word (mypaypal-login)."""
+    token = token.lower().strip("-.")
+    if len(token) < 3:
+        return False
+    if re.search(rf"(^|[.\-]){re.escape(token)}([.\-]|$)", host):
+        return True
+    return len(token) >= 6 and token in host.replace("-", "").replace(".", "")
+
+
+def domain_signals(url: str, host: str) -> dict:
+    """Score the link and its domain name alone (nothing is opened): imitation of an official body or a widely
+    phished brand on a domain that is not theirs, a raw IP address, a fake host before '@', punycode,
+    phishing words and throwaway top-level domains. Used when the page does not open, which is how most
+    phishing links in public lists look by the time anyone checks them."""
+    host = (host or "").lower().strip(".")
+    reasons, score, entity = [], 0, None
+
+    def add(points, ar, en):
+        nonlocal score
+        score += points
+        reasons.append({"points": points, "ar": ar, "en": en, "by": "domain"})
+
+    parts = urlsplit(url if "://" in url else "http://" + url)
+    if "@" in (parts.netloc or ""):
+        shown = parts.netloc.split("@", 1)[0]
+        add(35, f"يخفي العنوان الحقيقي خلف «{shown}@»: المتصفح يذهب إلى {host} لا إلى {shown}",
+            f"Hides the real address behind “{shown}@”: the browser goes to {host}, not {shown}")
+    try:
+        ipaddress.ip_address(host.strip("[]"))
+        add(30, "الرابط عنوان IP مباشر بلا اسم نطاق، كما تفعل صفحات الاحتيال المؤقتة",
+            "The link is a bare IP address with no domain name, as throwaway scam pages use")
+        return {"score": min(score + (10 if any(w in parts.path.lower() for w in LURE_WORDS) else 0), 100),
+                "reasons": reasons, "entity": None}
+    except ValueError:
+        pass
+    if "xn--" in host:
+        add(15, "اسم النطاق بحروف مشفّرة (punycode) قد تحاكي اسماً معروفاً",
+            "The domain uses encoded (punycode) letters that can mimic a known name")
+    if not store.official_entity(host):
+        for e in store.registry()["entities"]:
+            if any(_has_token(host, t) for t in e["brand_tokens"]):
+                entity = e
+                add(35, f"اسم النطاق يقلّد {e['name_ar']} وهو ليس نطاقها الرسمي ({', '.join(e['domains'])})",
+                    f"The domain name imitates {e['name_en']} and is not its official domain ({', '.join(e['domains'])})")
+                break
+        if not entity:
+            for brand, real in GLOBAL_BRANDS.items():
+                if _has_token(host, brand) and not any(host == d or host.endswith("." + d) for d in real):
+                    add(35, f"اسم النطاق يقلّد {brand} وهو ليس نطاقها الحقيقي ({', '.join(real)})",
+                        f"The domain name imitates {brand} and is not its real domain ({', '.join(real)})")
+                    break
+    lures = [w for w in LURE_WORDS if re.search(rf"(^|[.\-]){re.escape(w)}", host)]
+    if lures:
+        add(10, f"اسم النطاق فيه كلمات استدراج ({', '.join(lures[:3])})", f"The domain name carries lure words ({', '.join(lures[:3])})")
+    tld = host.rsplit(".", 1)[-1] if "." in host else ""
+    if tld in RISKY_TLDS:
+        add(10, f"امتداد .{tld} رخيص ويكثر في صفحات الاحتيال", f"The .{tld} ending is cheap and common on scam pages")
+        if lures:
+            add(10, "كلمات استدراج على امتداد رخيص معاً: نمط صفحات التصيّد المؤقتة",
+                "Lure words on a cheap ending together: the pattern of throwaway phishing pages")
+    if host.count("-") >= 3 or len(host) > 45 or host.count(".") >= 4:
+        add(5, "اسم نطاق طويل أو مليء بالشرطات", "A long or hyphen-heavy domain name")
+    return {"score": min(score, 100), "reasons": reasons, "entity": entity}
 
 
 def verdict_for(score: int) -> str:

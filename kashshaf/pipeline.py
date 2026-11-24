@@ -99,12 +99,26 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     # Web: open the link as a UAE phone and as a scanner.
     with stage("web") as web_agent:
         phone, bot = fetcher.fetch_two_views(url)
+    # The link and its domain name alone: what is left to judge when the page is gone (most links in public
+    # phishing lists are dead by the time they are checked).
+    named = rules.domain_signals(url, host)
     if not phone["html"] and not bot["html"]:
         report(web_agent, "warn", "تعذّر فتح الرابط", f"Could not open: {(phone['error'] or '')[:60]}")
-        return finish({"phone_view": {"error": phone["error"], "status": phone.get("status")},
-                       "bot_view": {"error": bot["error"], "status": bot.get("status")}, "error": phone["error"]},
-                      {"verdict": "unreachable", "score": 0, "reasons": [
-                          {"points": 0, "by": "fetch", "ar": "تعذّر فتح الرابط", "en": f"Could not open: {phone['error']}"}]})
+        dead = {"points": 0, "by": "fetch", "ar": "تعذّر فتح الرابط", "en": f"Could not open: {phone['error']}"}
+        views = {"phone_view": {"error": phone["error"], "status": phone.get("status")},
+                 "bot_view": {"error": bot["error"], "status": bot.get("status")}, "error": phone["error"]}
+        if named["score"] >= rules.SUSPICIOUS_AT:
+            # a dead page under a name that imitates a body or hides its address: suspicious, blocked until an
+            # analyst reviews it (never "fraud" without seeing the page)
+            with stage("domain") as domain_agent:
+                report(domain_agent, "bad", *_first(named["reasons"]))
+            return finish(views, {"verdict": "suspicious", "score": min(named["score"], rules.FRAUD_AT - 1),
+                                  "claimed_entity_id": named["entity"]["id"] if named["entity"] else None, "model": "rules",
+                                  "reasons": [dead, *named["reasons"], {"points": 0, "by": "rules",
+                                      "ar": "الصفحة لا تفتح، فالحكم من الرابط واسم النطاق وحدهما: محظور احترازياً حتى يراجعه محلل",
+                                      "en": "The page does not open, so the verdict rests on the link and its domain name alone: "
+                                            "blocked as a precaution until an analyst reviews it"}]})
+        return finish(views, {"verdict": "unreachable", "score": 0, "reasons": [dead, *named["reasons"]]})
     report(web_agent, "ok", f"فُتح كهاتف ({phone.get('status')}) وكأداة فحص ({bot.get('status')})",
            f"Opened as phone ({phone.get('status')}) and scanner ({bot.get('status')})")
 
@@ -112,6 +126,12 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     ev = rules.evaluate(host, phone, bot, stage=stage)
     # Google Maps showed this link under a place named like an official body, with a number that is not theirs:
     # a fake customer-service line is one more reason, on top of what the page itself shows.
+    # A link that hides its real address (a fake host before '@', a bare IP, punycode) is deceptive whatever the
+    # page shows; the brand-in-the-domain signal is already weighed with the page by the rules above.
+    tricks = [r for r in named["reasons"] if r["en"].startswith(("Hides the real address", "The link is a bare IP", "The domain uses encoded"))]
+    if tricks:
+        ev["reasons"] = ev["reasons"] + tricks
+        ev["score"] = min(100, ev["score"] + sum(r["points"] for r in tricks))
     fake_lines = phones.for_url(url_row["id"])
     if fake_lines:
         ev["reasons"] = ev["reasons"] + fake_lines

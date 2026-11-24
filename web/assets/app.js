@@ -845,8 +845,9 @@
       const r = await api("/api/import", { file_name: file.name, data: btoa(bin) });
       lastImport = { id: r.import.id, url_column: r.url_column, label_column: r.label_column };
       try { sessionStorage.setItem(IMPORT_KEY, JSON.stringify(lastImport)); } catch { /* private mode */ }
-      msg.textContent = ""; onlyMistakes = false; importKey = "";
-      await updateImport();
+      // the agents were off: the server switched them on for this file and switches them off when it is done
+      msg.className = "msg"; msg.textContent = r.agents_started ? t("imp.autoAgents") : ""; onlyMistakes = false; importKey = "";
+      refreshState(); await updateImport();
     } catch (err) { msg.className = "msg err"; msg.textContent = err.message; }
     $("#importFile").value = "";
   }

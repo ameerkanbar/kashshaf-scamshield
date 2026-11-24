@@ -348,8 +348,10 @@ class Handler(BaseHTTPRequestHandler):
             if not parsed["items"]:
                 return self.json({"error": "لم نجد أي روابط في الملف"}, 400)
             batch = store.create_import(name, actor, parsed, config.RECHECK_AFTER_HOURS)
+            started = _agents_for_import(batch["id"], actor)  # agents off? on for this file, off again after it
             pool.notify()
-            return self.json({"import": batch, "url_column": parsed["url_column"], "label_column": parsed["label_column"]})
+            return self.json({"import": batch, "url_column": parsed["url_column"], "label_column": parsed["label_column"],
+                              "agents_started": started})
         if path == "/api/discover":
             kind = data.get("kind")
             if kind not in ("google", "ct", "feed"):
@@ -398,6 +400,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json({"error": "action must be start, stop, stop_search or patrol"}, 400)
             if "count" in data:
                 pool.resize(int(data["count"]))
+            with _import_lock:  # the analyst takes over: an import no longer switches the agents off afterwards
+                _import_run.update(started=False, ids=set())
             fn(pool, actor)
             return self.json(control.snapshot())
         if path == "/api/agents":
@@ -529,6 +533,46 @@ def main():
           f"Google {'ON' if config.SERPAPI_KEY else 'OFF'}")
     uaepass.configure(args.port)  # the simulated UAE PASS is served by this same server
     _listen(args.host, args.port, Handler).serve_forever()
+
+
+# ---- a file import runs even when the agents are off ----------------------------------------------------------
+# If the agents were off when a file came in, they are switched on for it and off again once every link of every
+# such file is checked. If the analyst presses start or stop meanwhile, their choice stands.
+_import_lock = threading.Lock()
+_import_run = {"started": False, "ids": set()}
+
+
+def _agents_for_import(batch_id: int, actor: str) -> bool:
+    with _import_lock:
+        if not control.state["running"]:
+            control.start(pool, f"import:{actor}")
+            _import_run.update(started=True)
+        if not _import_run["started"]:
+            return False  # the agents were already on: nothing to switch off later
+        _import_run["ids"].add(batch_id)
+    threading.Thread(target=_watch_import, args=(batch_id,), daemon=True, name=f"import-{batch_id}").start()
+    return True
+
+
+def _watch_import(batch_id: int) -> None:
+    deadline = time.time() + 12 * 3600  # never keep the agents on for a stuck file forever
+    while time.time() < deadline:
+        time.sleep(10)
+        with _import_lock:
+            if not _import_run["started"]:
+                return  # the analyst took over
+        try:
+            r = store.import_result(batch_id)
+            if r["done"] >= r["total"]:
+                break
+        except Exception as e:  # keep watching through a passing database hiccup
+            print(f"[import] watching file {batch_id}: {e}")
+    with _import_lock:
+        _import_run["ids"].discard(batch_id)
+        if _import_run["started"] and not _import_run["ids"]:
+            _import_run.update(started=False)
+            control.stop(pool, "import_finished")  # they were off before the file came in
+            print(f"[import] file {batch_id} done: agents switched off again, as they were before")
 
 
 def _listen(host: str, port: int, handler) -> ThreadingHTTPServer:

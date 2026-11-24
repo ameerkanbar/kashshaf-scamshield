@@ -48,10 +48,14 @@ def fetch(url: str, user_agent: str) -> dict:
     if (is_test and not ALLOW_TEST_SITES) or (not is_test and not _public_host(parts.hostname)):
         return {"html": "", "final_url": url, "status": None, "error": "blocked: internal address"}
     headers = {"User-Agent": user_agent, "Accept-Language": "ar-AE,en-AE;q=0.9,en;q=0.8"}
-    target = url
+    # "http://paypal.com@evil.example/" goes to evil.example: drop the decoy before '@', as a browser does
+    # (urllib would otherwise take "paypal.com@evil.example" for the host name and fail).
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    real = host + (f":{parts.port}" if parts.port else "")
+    target = urlunsplit((parts.scheme, real, parts.path or "/", parts.query, "")) if "@" in parts.netloc else url
     # *.localhost names are our local TEST pages; connect to 127.0.0.1 and keep the Host header.
     if parts.hostname and parts.hostname.endswith(".localhost"):
-        headers["Host"] = parts.netloc
+        headers["Host"] = real
         headers["X-Kashshaf-Scan"] = "1"  # the TEST pages' simulated network block lets our own scans through
         target = urlunsplit((parts.scheme, f"127.0.0.1:{parts.port or 80}", parts.path or "/", parts.query, ""))
     req = urllib.request.Request(target, headers=headers)

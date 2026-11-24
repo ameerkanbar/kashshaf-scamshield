@@ -5,6 +5,7 @@ says whether each link is fraud or legitimate (label, class, type, is_phishing..
 expected label, so the dashboard can measure precision and recall against it.
 """
 import csv
+import ipaddress
 import io
 import json
 import re
@@ -13,8 +14,12 @@ import zipfile
 
 MAX_LINKS = 5000
 
-_LINK = re.compile(r"^(?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,63}(?::\d{2,5})?(?:[/?#]\S*)?$", re.IGNORECASE)
-_LOCAL = re.compile(r"^(?:https?://)?[a-z0-9.-]+\.localhost(?::\d{2,5})?(?:[/?#]\S*)?$", re.IGNORECASE)
+# A link: optional scheme, optional "decoy@" before the host (http://paypal.com@evil.example/), then a domain
+# name (any script, punycode included) or a bare IPv4 address, an optional port and path. Phishing lists are
+# full of IP links and decoy@ links, so neither may be dropped.
+_HOST = r"(?:(?:[^\W_](?:[\w-]{0,61}[^\W_])?\.)+(?:[^\W\d_]{2,63}|xn--[a-z0-9-]{2,59})|(?:\d{1,3}\.){3}\d{1,3})"
+_LINK = re.compile(rf"^(?:https?://)?(?:[^\s/@]+@)?{_HOST}(?::\d{{2,5}})?(?:[/?#]\S*)?$", re.IGNORECASE)
+_LOCAL = re.compile(r"^(?:https?://)?(?:[^\s/@]+@)?[a-z0-9.-]+\.localhost(?::\d{2,5})?(?:[/?#]\S*)?$", re.IGNORECASE)
 
 FRAUD_WORDS = {"phishing", "phish", "malicious", "fraud", "fraudulent", "scam", "bad", "spam", "malware",
                "defacement", "1", "true", "yes", "احتيال", "احتيالي", "مزيف", "ضار"}
@@ -31,7 +36,17 @@ def clean_link(cell: str) -> str | None:
     s = re.sub(r"^hxxp", "http", s, flags=re.IGNORECASE)
     if not s or " " in s or not (_LINK.match(s) or _LOCAL.match(s)):
         return None
-    return s if re.match(r"^https?://", s, re.IGNORECASE) else "http://" + s
+    has_scheme = bool(re.match(r"^https?://", s, re.IGNORECASE))
+    authority = re.sub(r"^https?://", "", s, flags=re.IGNORECASE).split("/", 1)[0].split("?", 1)[0]
+    if "@" in authority and not has_scheme:
+        return None  # "name@example.com" is an email address, not a link
+    host = authority.rsplit("@", 1)[-1].rsplit(":", 1)[0]
+    if re.fullmatch(r"[\d.]+", host):
+        try:
+            ipaddress.IPv4Address(host)
+        except ValueError:
+            return None  # 999.1.1.1 is not an address
+    return s if has_scheme else "http://" + s
 
 
 def label_of(cell: str) -> str | None:
