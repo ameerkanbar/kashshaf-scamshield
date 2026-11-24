@@ -1,7 +1,7 @@
 """Inspect one URL: official check -> two-view fetch -> rules -> Claude agent -> stored verdict."""
 from datetime import datetime, timedelta, timezone
 
-from . import agent, config, control, fetcher, rules, store, supa
+from . import agent, config, control, evidence, fetcher, rules, store, supa
 
 UAE = timezone(timedelta(hours=4))  # Abu Dhabi time, no daylight saving
 
@@ -27,7 +27,7 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     # A new link on a domain the database already blocks: same verdict, no fetch, no Claude.
     # (A link that was judged before goes through the full check, so "rescan" can still clear it.)
     dom = store.domain_status(host)
-    if store.is_blocked(dom) and supa.count("verdicts", url_id=f"eq.{url_row['id']}") == 0:
+    if store.is_confirmed_fraud(dom) and supa.count("verdicts", url_id=f"eq.{url_row['id']}") == 0:
         when = dom.get("blocked_at") or dom.get("updated_at")
         since = datetime.fromisoformat(when).astimezone(UAE).strftime("%d/%m/%Y %H:%M") if when else ""
         verdict = {"verdict": "fraud", "score": dom.get("score") or 100, "model": "database",
@@ -37,6 +37,7 @@ def inspect(url_row: dict, agent_name: str) -> dict:
                                 "en": f"Domain already blocked in the database since {since} (UAE time)"}]}
         store.save_result(url_row, agent_name, None, verdict)
         control.saved("ai")
+        evidence.schedule(url_row, agent_name)
         return verdict
 
     phone, bot = fetcher.fetch_two_views(url)
@@ -55,17 +56,30 @@ def inspect(url_row: dict, agent_name: str) -> dict:
                "claimed_entity_id": ev["entity"]["id"] if ev["entity"] else None,
                "fingerprints": ev["fingerprints"], "model": "rules"}
 
+    # The full check: the Claude agent reads the whole page, the registry, the domain's registration
+    # and the web before the final verdict. Only when it finds nothing wrong is a site called safe.
+    result = None
     if agent.enabled() and ev["score"] >= config.AGENT_MIN_RULE_SCORE:
         result = agent.investigate(url, ev)
-        if result:
-            known = {e["id"] for e in store.registry()["entities"]}
-            verdict.update(
-                verdict=result["verdict"], score=result["score"], model=result["model"],
-                claimed_entity_id=result["claimed_entity_id"] if result["claimed_entity_id"] in known
-                else verdict["claimed_entity_id"],
-                reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
-                                         for ar, en in zip(result["reasons_ar"], result["reasons_en"])],
-                ai={"summary_ar": result["summary_ar"], "summary_en": result["summary_en"], "trace": result["trace"]})
+    if not result and ev["score"] > 0 and verdict["verdict"] == "safe":
+        # the rules saw warning signs but the full check could not run: not sure = suspicious,
+        # so it is blocked until an analyst looks at it
+        verdict.update(verdict="suspicious", score=max(ev["score"], rules.SUSPICIOUS_AT))
+        verdict["reasons"] = ev["reasons"] + [{"points": 0, "by": "rules",
+            "ar": "ظهرت علامات تحذير ولم يكتمل التحقيق الكامل: محظور احترازياً حتى يراجعه محلل",
+            "en": "Warning signs and the full investigation could not run: blocked as a precaution until an analyst reviews it"}]
+    if result:
+        known = {e["id"] for e in store.registry()["entities"]}
+        verdict.update(
+            verdict=result["verdict"], score=result["score"], model=result["model"],
+            claimed_entity_id=result.get("claimed_entity_id") if result.get("claimed_entity_id") in known
+            else verdict["claimed_entity_id"],
+            reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
+                                     for ar, en in zip(result.get("reasons_ar") or [], result.get("reasons_en") or [])],
+            ai={"summary_ar": result.get("summary_ar"), "summary_en": result.get("summary_en"), "trace": result.get("trace")})
 
     store.save_result(url_row, agent_name, scan, verdict)
+    if verdict["verdict"] in store.BLOCKING:
+        # scam pages vanish fast: keep the evidence from the moment we judged it
+        evidence.schedule(url_row, agent_name)
     return verdict

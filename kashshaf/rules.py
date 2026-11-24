@@ -198,9 +198,20 @@ def evaluate(host: str, phone: dict, bot: dict) -> dict:
         add(20, "يرسل البيانات المسروقة إلى بوت تيليجرام", "Sends stolen data to a Telegram bot")
 
     created = domain_created(host)
-    if created and (date.today() - created).days < 30 and (entity or score):
+    new_domain = bool(created) and (date.today() - created).days < 30
+    if new_domain and (entity or score):
         add(15, f"النطاق مسجّل منذ {(date.today() - created).days} يوماً فقط",
             f"Domain registered only {(date.today() - created).days} days ago")
+
+    # A brand name in the domain and title is not enough for "fraud" on its own: a real site missing
+    # from the registry looks exactly like that. Fraud needs something that harms: a form taking card,
+    # OTP or ID details, cloaking, a Telegram exfil bot, or a domain registered days ago.
+    harmful = card_form or id_form or cloaked or new_domain or any(f["kind"] == "telegram_bot" for f in fps)
+    if score >= FRAUD_AT and not harmful:
+        score = FRAUD_AT - 1
+        reasons.append({"points": 0, "by": "rules",
+                        "ar": "لا يطلب بيانات بطاقة أو رمز تحقق ولا يخفي نفسه: مشبوه فقط حتى يراجعه محلل",
+                        "en": "Asks for no card or OTP details and does not cloak: suspicious only, pending analyst review"})
 
     return {"score": min(score, 100), "reasons": reasons, "entity": entity, "fingerprints": fps,
             "similarity": similarity, "cloaked": cloaked,

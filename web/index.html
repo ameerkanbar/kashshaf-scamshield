@@ -44,6 +44,7 @@
     <button data-tab="overview" class="active">لوحة المتابعة</button>
     <button data-tab="scan">فحص رسالة أو رابط</button>
     <button data-tab="findings">النتائج</button>
+    <button data-tab="review">المراجعة <span class="nav-count" id="reviewCount" hidden></span></button>
     <button data-tab="blocked">المحظورة</button>
     <button data-tab="gangs">العصابات</button>
     <button data-tab="discover">الاكتشاف</button>
@@ -84,6 +85,22 @@
       </div>
       <!-- Only the latest check is shown here; a new check replaces it -->
       <div class="panel scan-result" id="scanResult" aria-live="polite" hidden></div>
+
+      <!-- Import a file of links: each one gets the full check; labels (if any) give precision and recall -->
+      <div class="panel" id="importPanel">
+        <div class="panel-head"><h2>استيراد ملف روابط</h2></div>
+        <p class="muted">ارفع ملفاً فيه روابط: <b>CSV</b> أو <b>Excel (.xlsx)</b> أو <b>TXT</b> (رابط في كل سطر) أو <b>JSON</b>.
+          يجد النظام عمود الروابط وحده، ويفحص كل رابط فحصاً كاملاً. إذا كان في الملف عمود يقول إن الرابط احتيالي أو سليم
+          (مثل phishing / legitimate أو 1 / 0 أو احتيال / سليم)، تظهر دقة النظام مقارنة به.</p>
+        <label class="dropzone" id="dropzone">
+          <input type="file" id="importFile" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" hidden>
+          <span class="dropzone-icon" aria-hidden="true">⇪</span>
+          <b>اسحب الملف إلى هنا أو اضغط لاختياره</b>
+          <span class="muted small">حتى 5000 رابط في الملف</span>
+        </label>
+        <div class="row-actions"><span id="importMsg" class="error" role="alert"></span></div>
+        <div id="importResult" aria-live="polite" hidden></div>
+      </div>
     </section>
 
     <!-- Findings -->
@@ -95,15 +112,22 @@
             <input id="search" type="search" placeholder="بحث في الروابط والعناوين" dir="auto">
             <select id="verdictFilter">
               <option value="">كل الأحكام</option><option value="fraud">احتيال</option>
-              <option value="suspicious">مشبوه</option><option value="safe">آمن</option>
+              <option value="suspicious">مشبوه</option><option value="review">بانتظار المراجعة</option><option value="safe">آمن</option>
               <option value="official">رسمي</option><option value="unreachable">تعذّر الفتح</option>
             </select>
           </div>
         </div>
-        <div class="table-wrap"><table class="table">
-          <thead><tr><th>الحكم</th><th>التاريخ والوقت</th><th>الرابط</th><th>الجهة المنتحَلة</th><th>المصدر</th><th>الحظر</th><th></th></tr></thead>
-          <tbody id="findingsBody"></tbody>
-        </table></div>
+        <div class="results" id="findingsBody" role="list"></div>
+      </div>
+    </section>
+
+    <!-- Review: suspicious sites, blocked until an analyst decides -->
+    <section data-view="review" hidden>
+      <div class="panel">
+        <div class="panel-head"><h2>بانتظار المراجعة <span class="muted" id="reviewTotal"></span></h2></div>
+        <p class="muted review-note">كل موقع مشبوه يُحظر فوراً حتى يراجعه محلل، فلا يصل إليه أي ساكن قبل التأكد منه.
+          راجع الأدلة ثم قرّر: <b>آمن</b> يرفع الحظر، <b>رسمي</b> يضيفه إلى السجل الرسمي، <b>احتيال</b> يثبّت الحظر.</p>
+        <div class="results" id="reviewBody" role="list"></div>
       </div>
     </section>
 

@@ -4,7 +4,7 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const VERDICT = { fraud: "احتيال", suspicious: "مشبوه", safe: "آمن", official: "رسمي", unreachable: "تعذّر الفتح" };
   const SOURCE = { message: "رسالة", serp_organic: "نتائج جوجل", serp_ad: "إعلان جوجل", serp_ai_overview: "ملخص الذكاء الاصطناعي",
-    maps: "الخرائط", ct_log: "سجل الشهادات", phish_feed: "قائمة تصيّد", analyst: "محلل", gateway: "رابط محمي", seed: "تجربة" };
+    maps: "الخرائط", ct_log: "سجل الشهادات", phish_feed: "قائمة تصيّد", analyst: "محلل", gateway: "رابط محمي", seed: "تجربة", import: "استيراد ملف" };
   const pill = (v) => `<span class="pill v-${esc(v)}">${VERDICT[v] || esc(v)}</span>`;
   // Date and time everywhere, e.g. 23/11/2026 · 3:24:56 م. Accepts ISO strings or Unix seconds.
   const time = (t) => {
@@ -64,16 +64,49 @@
   });
 
   // ---- renderers ---------------------------------------------------------
-  function findingRow(f) {
-    return `<tr>
-      <td>${pill(f.verdict)}<div class="muted">${f.score}/100</div>${f.cloaked ? '<span class="tag">إخفاء</span>' : ""}</td>
-      <td class="nowrap">${time(f.created_at)}</td>
-      <td><span class="url">${esc(f.url)}</span><div class="muted">${esc(f.title || "")}</div></td>
-      <td>${esc(f.entity_ar || "—")}</td>
-      <td>${(f.sources || []).map((s) => `<span class="tag">${SOURCE[s] || esc(s)}</span>`).join("")}<div class="muted">${f.sightings} ظهور</div></td>
-      <td>${f.blocked ? '<span class="blocked">محظور</span>' : "—"}${f.override ? `<div class="muted">يدوي: ${f.override === "block" ? "حظر" : "سماح"}</div>` : ""}</td>
-      <td><button class="btn btn-sm" data-open="${f.url_id}">التفاصيل</button></td></tr>`;
+  function findingRow(f, review = false) {
+    // One result = one card: verdict | link and facts | decision. It wraps instead of scrolling sideways.
+    const sources = (f.sources || []).map((s) => `<span class="tag">${SOURCE[s] || esc(s)}</span>`).join("");
+    return `<article class="result v-edge-${esc(f.verdict)}${review ? " result-review" : ""}" role="listitem">
+      <div class="result-verdict">${pill(f.verdict)}<div class="result-score">${f.score}<small>/100</small></div>
+        ${f.cloaked ? '<span class="tag">إخفاء</span>' : ""}</div>
+      <div class="result-main">
+        <span class="url">${esc(f.url)}</span>
+        ${f.title ? `<div class="result-title">${esc(f.title)}</div>` : ""}
+        <div class="result-meta">
+          <span><span class="muted">الجهة المنتحَلة:</span> ${esc(f.entity_ar || "—")}</span>
+          <span><span class="muted">المصدر:</span> ${sources || "—"} <span class="muted">· ${f.sightings} ظهور</span></span>
+          <span>${time(f.created_at)}</span>
+        </div>
+      </div>
+      <div class="result-side">
+        <div>${f.pending_review ? '<span class="pending">⏳ محظور احترازياً</span><div class="muted small">بانتظار مراجعة محلل</div>'
+          : f.blocked ? '<span class="blocked">⛔ محظور</span>' : '<span class="muted">غير محظور</span>'}
+          ${f.override ? `<div class="muted small">قرار المحلل: ${f.override === "block" ? "احتيال" : "سماح"}</div>` : ""}</div>
+        <button class="btn btn-sm" data-open="${f.url_id}">${review ? "الأدلة كاملة" : "التفاصيل"}</button>
+        ${review ? decisionButtons(f.domain, f.claimed_entity_id) : ""}
+      </div></article>`;
   }
+
+  // An analyst's decision on a site blocked pending review.
+  function decisionButtons(domain, entity) {
+    const d = esc(domain);
+    return `<div class="decide">
+      <button class="btn btn-sm btn-ok" data-decide="allow" data-domain="${d}">آمن · رفع الحظر</button>
+      ${entity ? `<button class="btn btn-sm" data-decide="official" data-domain="${d}">رسمي</button>` : ""}
+      <button class="btn btn-sm btn-danger" data-decide="block" data-domain="${d}">احتيال · تثبيت الحظر</button></div>`;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-decide]");
+    if (!b) return;
+    b.closest(".decide").querySelectorAll("button").forEach((x) => (x.disabled = true));
+    try {
+      await api("/api/override", { domain: b.dataset.domain, action: b.dataset.decide });
+    } catch (err) {
+      alert(err.message);
+    }
+    refresh();
+  });
 
   // Every 3 seconds: the status (from /api/state) and the current tab's list load side by side.
   let lastState = null;
@@ -95,8 +128,10 @@
         [!st.control.running ? "الوكلاء متوقفون" : st.control.patrol ? "الدورية المستمرة تعمل" : "الوكلاء جاهزون", st.control.running],
       ].map(([text, on]) => `<span class="chip ${on ? "on" : "off"}">${esc(text)}</span>`).join("");
 
+      $("#reviewCount").hidden = !s.review;
+      $("#reviewCount").textContent = s.review;
       if (t === "overview") {
-        $("#kpis").innerHTML = [["روابط مفحوصة", s.urls], ["في الانتظار", s.queued + s.checking], ["مواقع محظورة", s.blocked, "danger"],
+        $("#kpis").innerHTML = [["روابط مفحوصة", s.urls], ["في الانتظار", s.queued + s.checking], ["مواقع محظورة", s.blocked, "danger"], ["بانتظار المراجعة", s.review, "warn"],
           ["احتيال", s.fraud, "danger"], ["مشبوه", s.suspicious], ["مواقع تخفي نفسها", s.cloaked], ["مواقع رسمية", s.official], ["رسائل", s.messages]]
           .map(([k, v, c]) => `<div class="kpi ${c || ""}"><b>${v}</b><span>${k}</span></div>`).join("");
       }
@@ -159,7 +194,16 @@
         const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort: asked });
         const rows = await api(`/api/findings?${q}`);
         if (stale()) return;
-        $("#findingsBody").innerHTML = rows.map(findingRow).join("") || '<tr><td colspan="7" class="empty">لا توجد نتائج.</td></tr>';
+        $("#findingsBody").innerHTML = rows.map(findingRow).join("") || '<p class="empty">لا توجد نتائج.</p>';
+      }
+      if (t === "review") {
+        const rows = await api(`/api/findings?verdict=review&sort=${asked}`);
+        if (stale()) return;
+        // one card per site: its most dangerous link
+        const seen = new Set(), sites = rows.filter((f) => !seen.has(f.domain) && seen.add(f.domain));
+        $("#reviewTotal").textContent = `· ${sites.length}`;
+        $("#reviewBody").innerHTML = sites.map((f) => findingRow(f, true)).join("")
+          || '<p class="empty">لا توجد مواقع بانتظار المراجعة.</p>';
       }
       if (t === "gangs") {
         const gangs = await api(`/api/gangs?sort=${asked}`);
@@ -175,7 +219,7 @@
         blockedRows = rows;
         renderBlocked();
       }
-      if (t === "scan") await updateScan();
+      if (t === "scan") await Promise.all([updateScan(), updateImport()]);
       if (t === "audit") {
         const log = await api(`/api/audit?sort=${asked}`);
         if (stale()) return;
@@ -306,6 +350,111 @@
     } catch (e) { delete msg.dataset.keep; msg.textContent = e.message; }
   }
 
+  // ---- import a file of links -------------------------------------------------
+  // Only the latest import is shown (like the latest check). Its id survives a reload.
+  const IMPORT_KEY = "kashshaf.lastImport";
+  let lastImport = null, importData = null, importKey = "", onlyMistakes = false;
+  try { lastImport = JSON.parse(sessionStorage.getItem(IMPORT_KEY) || "null"); } catch (e) { lastImport = null; }
+  const pct = (x) => (x == null ? "—" : `${Math.round(x * 1000) / 10}%`);
+  const EXPECTED = { fraud: "احتيال", legit: "سليم" };
+
+  async function sendFile(file) {
+    const msg = $("#importMsg");
+    msg.textContent = "";
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { msg.textContent = "الملف أكبر من 10 ميجابايت."; return; }
+    msg.className = "muted"; msg.textContent = `جارٍ رفع ${file.name}…`;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const r = await api("/api/import", { file_name: file.name, data: btoa(bin) });
+      lastImport = { id: r.import.id, url_column: r.url_column, label_column: r.label_column };
+      try { sessionStorage.setItem(IMPORT_KEY, JSON.stringify(lastImport)); } catch (e) { /* private mode */ }
+      msg.textContent = ""; onlyMistakes = false; importKey = "";
+      await updateImport();
+    } catch (err) {
+      msg.className = "error"; msg.textContent = err.message;
+    }
+    $("#importFile").value = "";
+  }
+  $("#importFile").addEventListener("change", (e) => sendFile(e.target.files[0]));
+  const dz = $("#dropzone");
+  ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("over"); }));
+  dz.addEventListener("drop", (e) => sendFile(e.dataTransfer.files[0]));
+
+  async function updateImport() {
+    if (!lastImport) return;
+    const asked = lastImport;
+    const data = await api(`/api/import_result?id=${asked.id}`);
+    if (asked !== lastImport) return;  // a newer import started meanwhile
+    importData = data;
+    const key = JSON.stringify([data.done, data.rows.map((r) => [r.verdict, r.blocked, r.pending_review]), sort, onlyMistakes]);
+    if (key !== importKey) { importKey = key; renderImport(); }
+  }
+
+  const wrong = (r) => r.expected && !r.pending && (r.expected === "fraud") !== r.blocked;
+  function renderImport() {
+    const d = importData, b = d.import, m = d.metrics, box = $("#importResult");
+    box.hidden = false;
+    const at = (r) => (r.checked_at ? Date.parse(r.checked_at) : 0);
+    let rows = d.rows.filter((r) => !onlyMistakes || wrong(r));
+    rows = sort === "risk" ? [...rows].sort((x, y) => (SEV[y.verdict] ?? -2) - (SEV[x.verdict] ?? -2) || (y.score || 0) - (x.score || 0))
+      : [...rows].sort((x, y) => (y.pending - x.pending) || (sort === "old" ? at(x) - at(y) : at(y) - at(x)));
+    const shown = rows.slice(0, 300);
+    const done = d.done === d.total;
+    box.innerHTML = `
+      <div class="import-head">
+        <div><b>${esc(b.file_name)}</b>
+          <div class="muted small">رفعه ${esc(b.imported_by)} · ${time(b.at)} · ${b.total} رابط${b.skipped ? ` · تجاهلنا ${b.skipped} سطراً بلا رابط أو مكرراً` : ""}
+          · عمود الروابط: ${esc(String(lastImport.url_column ?? "—"))}${lastImport.label_column ? ` · عمود التصنيف: ${esc(String(lastImport.label_column))}` : ""}</div></div>
+        <button class="btn btn-sm" id="importExport">تصدير النتائج CSV</button>
+      </div>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${d.total}" aria-valuenow="${d.done}">
+        <span style="width:${d.total ? (100 * d.done) / d.total : 0}%"></span></div>
+      <p class="muted small">${done ? "اكتمل فحص كل الروابط." : `فُحص ${d.done} من ${d.total} · الوكلاء يعملون على الباقي`}</p>
+      <div class="import-counts">
+        ${["fraud", "suspicious", "safe", "official", "unreachable"].map((v) => `<span>${pill(v)} <b>${d.counts[v] || 0}</b></span>`).join("")}
+        <span><span class="blocked">⛔ محظور</span> <b>${d.blocked}</b></span>
+      </div>
+      ${m ? `<div class="metrics">
+        <div class="metric"><b>${pct(m.precision)}</b><span>الدقة (Precision)</span><small>من المحظور فعلاً احتيال</small></div>
+        <div class="metric"><b>${pct(m.recall)}</b><span>الاستدعاء (Recall)</span><small>من الاحتيال تم حظره</small></div>
+        <div class="metric"><b>${pct(m.f1)}</b><span>F1</span><small>توازن الاثنين</small></div>
+        <div class="metric"><b>${pct(m.accuracy)}</b><span>الصحة (Accuracy)</span><small>من ${m.checked} رابطاً مصنّفاً</small></div>
+        <div class="metric confusion"><span>احتيال حُظر <b>${m.tp}</b></span><span>احتيال فات <b class="bad">${m.fn}</b></span>
+          <span>سليم حُظر خطأً <b class="bad">${m.fp}</b></span><span>سليم مفتوح <b>${m.tn}</b></span></div>
+      </div>
+      <label class="check"><input type="checkbox" id="onlyMistakes" ${onlyMistakes ? "checked" : ""}> عرض الأخطاء فقط (${d.rows.filter(wrong).length})</label>` : ""}
+      <div class="import-rows" role="list">
+        ${shown.map((r) => `<div class="import-row${wrong(r) ? " is-wrong" : ""}" role="listitem">
+          <span class="muted small">#${r.line}</span>
+          <span class="url">${esc(r.url || "")}</span>
+          <span>${r.expected ? `<span class="muted small">المتوقع:</span> ${EXPECTED[r.expected]}` : ""}</span>
+          <span>${r.pending ? '<span class="muted"><span class="spin" aria-hidden="true"></span> قيد الفحص</span>'
+            : `${pill(r.verdict)} ${r.pending_review ? '<span class="pending small">⏳ مراجعة</span>' : r.blocked ? '<span class="blocked small">⛔</span>' : ""}`}</span>
+          <span class="small">${r.checked_at ? time(r.checked_at) : ""}</span>
+          ${r.pending ? "<span></span>" : `<button class="btn btn-sm" data-open="${r.url_id}">التفاصيل</button>`}
+        </div>`).join("")}
+      </div>
+      ${rows.length > shown.length ? `<p class="muted small">يظهر أول ${shown.length} من ${rows.length}. الملف المصدَّر فيه الكل.</p>` : ""}`;
+    $("#importExport").onclick = exportImport;
+    const om = $("#onlyMistakes");
+    if (om) om.onchange = () => { onlyMistakes = om.checked; importKey = ""; renderImport(); };
+  }
+
+  function exportImport() {
+    const cols = ["line", "url", "expected", "verdict", "score", "blocked", "pending_review", "entity_ar", "checked_at"];
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [cols.join(","), ...importData.rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `kashshaf-import-${importData.import.id}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   // ---- blocked list --------------------------------------------------------
   let blockedRows = [];
   function renderBlocked() {
@@ -315,12 +464,13 @@
     $("#blockedBody").innerHTML = rows.map((b) => `<tr><td class="nowrap">${time(b.blocked_at)}</td>
       <td><span class="url">${esc(b.domain)}</span></td><td>${esc(b.entity_ar || "—")}</td><td>${b.score}/100</td>
       <td>${b.links}</td><td>${b.sightings}</td><td class="nowrap">${time(b.first_seen)}</td><td class="nowrap">${time(b.last_seen) || "—"}</td>
-      <td>${b.override === "block" ? `يدوي${b.override_by ? `<div class="muted">${esc(b.override_by)}</div>` : ""}` : "تلقائي"}</td></tr>`).join("")
+      <td>${b.pending_review ? '<span class="pending">⏳ بانتظار المراجعة</span>' : b.override === "block" ? `يدوي${b.override_by ? `<div class="muted">${esc(b.override_by)}</div>` : ""}` : "تلقائي"}</td></tr>`).join("")
       || '<tr><td colspan="9" class="empty">لا توجد مواقع محظورة.</td></tr>';
   }
   $("#blockedSearch").addEventListener("input", renderBlocked);
   $("#exportBtn").onclick = () => {
-    const cols = ["domain", "entity_en", "score", "blocked_at", "first_seen", "last_seen", "links", "sightings", "override"];
+    const cols = ["domain", "entity_en", "score", "blocked_at", "first_seen", "last_seen", "links", "sightings", "override",
+      "pending_review", "registrar", "registrar_abuse", "domain_created", "ip", "hosting", "hosting_abuse", "evidence_at"];
     const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const csv = [cols.join(","), ...blockedRows.map((b) => cols.map((c) => cell(b[c])).join(","))].join("\n");
     const a = document.createElement("a");
@@ -341,6 +491,7 @@
   };
   function resort() {
     renderScan();
+    if (importData) { importKey = ""; renderImport(); }
     if (tab === "agents" && lastState) renderAgents(lastState.agents);
     if (session) loadList();
   }
@@ -388,9 +539,12 @@
         <div>${d.fingerprints.map((f) => `<span class="tag">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || '<span class="muted">لا يوجد</span>'}</div>
         <h3>أين ظهر</h3>
         <div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${SOURCE[x.source] || esc(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · الترتيب ${x.position}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
+        <h3>الأدلة للشرطة وطلب الإزالة</h3>
+        <div id="evidenceBox" class="evidence"><p class="muted">جارٍ تحميل الأدلة…</p></div>
         <div class="row-actions">
-          <button class="btn btn-danger" data-override="block">حظر النطاق</button>
-          <button class="btn" data-override="allow">سماح</button>
+          <button class="btn btn-danger" data-override="block">احتيال · حظر النطاق</button>
+          <button class="btn btn-ok" data-override="allow">آمن · سماح</button>
+          ${v.claimed_entity_id ? '<button class="btn" data-override="official">رسمي · إضافة للسجل</button>' : ""}
           <button class="btn" data-override="">إلغاء القرار اليدوي</button>
           <button class="btn" id="rescan">إعادة الفحص</button>
           <a class="btn" href="/blocked?url=${encodeURIComponent(d.url.url)}" target="_blank" rel="noopener">صفحة التحذير</a>
@@ -399,10 +553,127 @@
     $("#closeDetail").onclick = () => $("#detail").close();
     $("#rescan").onclick = () => api("/api/rescan", { url: d.url.url }).then(() => $("#detail").close());
     document.querySelectorAll("[data-override]").forEach((b) => (b.onclick = async () => {
-      await api("/api/override", { domain, action: b.dataset.override || null });
+      try {
+        await api("/api/override", { domain, action: b.dataset.override || null });
+      } catch (err) {
+        return alert(err.message);
+      }
       $("#detail").close(); refresh();
     }));
     $("#detail").showModal();
+    loadEvidence(d.url.id);
+  }
+
+  // ---- evidence: screenshot, WHOIS, hosting, hashes; the pack and the printable report ------------
+  async function apiRaw(path, body) {
+    const res = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) { showLogin(); throw new Error("login required"); }
+    if (!res.ok) {
+      let msg = res.statusText;
+      try { msg = (await res.json()).error || msg; } catch (e) { /* not JSON */ }
+      throw new Error(msg);
+    }
+    return res;
+  }
+
+  async function download(path, fallbackName) {
+    const res = await apiRaw(path);
+    const name = ((res.headers.get("Content-Disposition") || "").match(/filename="?([^"]+)"?/) || [])[1] || fallbackName;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(await res.blob());
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+
+  async function loadEvidence(urlId) {
+    const box = $("#evidenceBox");
+    if (!box) return;
+    let data;
+    try {
+      data = await api(`/api/evidence?url_id=${urlId}`);
+    } catch (err) {
+      box.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      return;
+    }
+    if ($("#evidenceBox") !== box) return;  // another link was opened meanwhile
+    const ev = data.items[0];
+    const ltr = (x) => `<span dir="ltr">${esc(x)}</span>`;
+    const row = (k, v) => (v ? `<tr><th>${k}</th><td>${v}</td></tr>` : "");
+    if (!ev) {
+      box.innerHTML = `<p class="muted">لم تُلتقط أدلة لهذا الرابط بعد. تُلتقط تلقائياً لحظة الحكم بالاحتيال أو الاشتباه.</p>
+        <div class="row-actions"><button class="btn btn-primary" id="evCapture">التقاط الأدلة الآن</button>
+        <span id="evMsg" class="muted small" role="status">${data.chrome ? "" : "Chrome غير موجود على هذا الجهاز، فلن تُلتقط صورة الشاشة"}</span></div>`;
+    } else {
+      const w = ev.whois || {}, h = ev.hosting || {}, errs = ev.errors || {};
+      box.innerHTML = `<div class="evidence-grid">
+          <div class="evidence-shot">${ev.screenshot_path ? '<img id="evShot" alt="لقطة الشاشة كما يراها هاتف في الإمارات">'
+            : `<div class="evidence-noshot">لا توجد لقطة شاشة${errs.screenshot ? `<span class="small">${esc(errs.screenshot)}</span>` : ""}</div>`}</div>
+          <table class="evidence-table">
+            ${row("وقت الالتقاط", time(ev.captured_at))}
+            ${row("عنوان الصفحة", esc(ev.page_title || ""))}
+            ${row("المسجِّل", esc(w.registrar || w.error || w.note || ""))}
+            ${row("تاريخ تسجيل النطاق", w.created ? `${ltr(w.created)}${w.age_days != null ? ` · عمره ${w.age_days} يوماً` : ""}` : "")}
+            ${row("بريد البلاغات لدى المسجِّل", w.abuse_email ? ltr(w.abuse_email) : "")}
+            ${row("الاستضافة", h.ip ? ltr([h.ip, h.as_name || h.owner, h.country].filter(Boolean).join(" · ")) : esc(h.note || ""))}
+            ${row("بريد البلاغات لدى الاستضافة", h.abuse_email ? ltr(h.abuse_email) : "")}
+            ${row("بصمة اللقطة SHA-256", ev.screenshot_sha256 ? `<span class="hash">${esc(ev.screenshot_sha256)}</span>` : "")}
+            ${row("بصمة نسخة الصفحة SHA-256", ev.html_sha256 ? `<span class="hash">${esc(ev.html_sha256)}</span>` : "")}
+            ${row("لم يُلتقط", errs.page ? esc(`نسخة الصفحة: ${errs.page}`) : "")}
+          </table>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-primary" id="evPack">تنزيل ملف الأدلة (ZIP)</button>
+          <button class="btn" id="evReport">تقرير للطباعة</button>
+          <button class="btn" id="evCapture">التقاط من جديد</button>
+          <span id="evMsg" class="muted small" role="status"></span>
+        </div>`;
+      const say = (t) => { const m = $("#evMsg"); if (m) m.textContent = t; };
+      $("#evPack").onclick = () => download(`/api/evidence_pack?url_id=${urlId}`, "kashshaf-evidence.zip").catch((e) => say(e.message));
+      $("#evReport").onclick = async () => {
+        const win = window.open("", "_blank");  // opened inside the click, so no popup blocker
+        try {
+          const res = await apiRaw(`/api/evidence_report?url_id=${urlId}`);
+          const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
+          if (win) {
+            win.location = url;
+            say("اطبع التقرير من نافذته (⌘P أو Ctrl+P) واحفظه PDF.");
+          } else {  // popups blocked: save the report as a file rather than leave the dashboard
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `kashshaf-report-${urlId}.html`;
+            a.click();
+            say("حُفظ التقرير كملف HTML: افتحه واطبعه PDF.");
+          }
+        } catch (e) {
+          if (win) win.close();
+          say(e.message);
+        }
+      };
+      if (ev.screenshot_path) {
+        apiRaw(`/api/evidence_file?id=${ev.id}&kind=screenshot`).then((r) => r.blob()).then((b) => {
+          const img = $("#evShot");
+          if (img) img.src = URL.createObjectURL(b);
+        }).catch(() => {});
+      }
+    }
+    $("#evCapture").onclick = async (e) => {
+      e.target.disabled = true;
+      const m = $("#evMsg");
+      if (m) m.textContent = "جارٍ التقاط الصورة وبيانات النطاق والاستضافة… حتى 30 ثانية";
+      try {
+        await api("/api/evidence_capture", { url_id: urlId });
+      } catch (err) {
+        if (m) m.textContent = err.message;
+        e.target.disabled = false;
+        return;
+      }
+      loadEvidence(urlId);
+    };
   }
 
   $("#tourBtn").addEventListener("click", () => window.KashshafTour?.start());

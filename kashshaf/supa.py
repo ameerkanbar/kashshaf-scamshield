@@ -34,12 +34,18 @@ def _request(method: str, path: str, *, params: dict | None = None, body=None,
     data = None if body is None else json.dumps(body, ensure_ascii=False, default=str).encode()
     req = urllib.request.Request(url, data=data, method=method,
                                  headers=_headers(key or config.SUPABASE_SECRET_KEY, headers))
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            raw = resp.read()
-            return json.loads(raw) if raw else None
-    except urllib.error.HTTPError as e:
-        raise SupabaseError(f"{method} {path} -> {e.code}: {e.read().decode('utf-8', 'replace')[:400]}") from None
+    for attempt in (1, 2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                raw = resp.read()
+                return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as e:
+            raise SupabaseError(f"{method} {path} -> {e.code}: {e.read().decode('utf-8', 'replace')[:400]}") from None
+        except (urllib.error.URLError, ConnectionError, TimeoutError):
+            # a dropped connection: a read is safe to repeat once; a write might have landed, so it is not
+            if method != "GET" or attempt == 2:
+                raise
+            time.sleep(0.5)
 
 
 def select(table: str, **params) -> list[dict]:
@@ -77,6 +83,28 @@ def count(table: str, **filters) -> int:
         method="HEAD", headers=_headers(config.SUPABASE_SECRET_KEY, {"Prefer": "count=exact"}))
     with urllib.request.urlopen(req, timeout=20) as resp:
         return int(resp.headers.get("Content-Range", "*/0").split("/")[-1] or 0)
+
+
+def storage_put(bucket: str, path: str, data: bytes, content_type: str) -> None:
+    """Upload (or replace) one file in a private Storage bucket."""
+    req = urllib.request.Request(
+        f"{config.SUPABASE_URL}/storage/v1/object/{bucket}/{urllib.parse.quote(path)}", data=data, method="POST",
+        headers=_headers(config.SUPABASE_SECRET_KEY, {"Content-Type": content_type, "x-upsert": "true"}))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            resp.read()
+    except urllib.error.HTTPError as e:
+        raise SupabaseError(f"storage put {path} -> {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from None
+
+
+def storage_get(bucket: str, path: str) -> bytes:
+    req = urllib.request.Request(f"{config.SUPABASE_URL}/storage/v1/object/{bucket}/{urllib.parse.quote(path)}",
+                                 headers=_headers(config.SUPABASE_SECRET_KEY))
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.read()
+    except urllib.error.HTTPError as e:
+        raise SupabaseError(f"storage get {path} -> {e.code}: {e.read().decode('utf-8', 'replace')[:300]}") from None
 
 
 _users: dict[str, tuple[float, dict]] = {}

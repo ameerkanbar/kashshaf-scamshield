@@ -26,7 +26,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 AGENT_BASE_URL = os.environ.get("AGENT_BASE_URL", "")
 SERPAPI_KEY = os.environ.get("SERPAPI_KEY", "")
 AGENT_COUNT = int(os.environ.get("AGENT_COUNT", "50"))
-AGENT_MIN_RULE_SCORE = int(os.environ.get("AGENT_MIN_RULE_SCORE", "1"))
+AGENT_MIN_RULE_SCORE = int(os.environ.get("AGENT_MIN_RULE_SCORE", "0"))
 DISCOVERY_INTERVAL_MIN = float(os.environ.get("DISCOVERY_INTERVAL_MIN", "0"))
 # Spending caps (per rolling hour). Past a cap, Google search pauses and links are judged by rules only.
 SERP_MAX_PER_HOUR = int(os.environ.get("SERP_MAX_PER_HOUR", "20"))
