@@ -8,6 +8,8 @@ import json
 import mimetypes
 import os
 import re
+import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -16,14 +18,15 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from kashshaf import config  # loads .env first
-from kashshaf import agent, control, discovery, evidence, health, importer, org, pipeline, store, supa, uaepass
+from kashshaf import agent, control, discovery, envfile, evidence, health, importer, org, pipeline, store, supa, uaepass
 from kashshaf.workers import Pool
 
 # What a victim can tell us in a verified report (the page shows the Arabic labels)
 REPORT_WHAT = ("card", "otp", "id", "password", "paid", "nothing")
 REPORT_CHANNELS = ("sms", "whatsapp", "email", "search", "ad", "social", "other")
 
-WEB = Path(__file__).resolve().parent / "web"
+ROOT = Path(__file__).resolve().parent
+WEB = ROOT / "web"
 URL_RE = re.compile(r"https?://[^\s<>\"'،]+", re.IGNORECASE)
 pool: Pool | None = None
 discovery_state = {"running": None, "last": None}
@@ -265,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(store.audit_log(40, ["google_search", "phish_feed", "ct_logs", "budget_reached",
                                                       "google_error", "search_stop", "patrol_start"], sort))
             return self.json(store.audit_log(sort=sort))
+        if path == "/api/keys":  # Settings -> Keys: which keys are set (secrets: only the last 4 characters)
+            return self.json({"fields": envfile.status()})
         if path == "/api/integrations":  # Settings page: live status of every outside service
             return self.json({"services": health.check(), "settings": health.settings()})
         if path == "/api/insights":
@@ -287,6 +292,29 @@ class Handler(BaseHTTPRequestHandler):
         if not user:
             return self.json({"error": "login required"}, 401)
         actor, data = user.get("email") or user["id"], self.body()
+
+        # Settings -> Keys: the keys of every service, saved to .env and applied at once
+        if path == "/api/keys/test":
+            return self.json(envfile.test(data.get("group", ""), data.get("values") or {}))
+        if path == "/api/keys":
+            changes, errors = envfile.clean(dict(data.get("values") or {}))
+            if errors:
+                return self.json({"error": "invalid", "errors": errors}, 400)
+            if any(k.startswith("SUPABASE_") for k in changes):  # never switch to a database that does not answer
+                check = envfile.test("supabase", changes)
+                if not check["ok"]:
+                    return self.json({"error": "supabase", "test": check}, 400)
+            if changes:
+                envfile.write(changes)
+                envfile.apply()
+                store.audit(actor, "keys_changed", None, {"keys": sorted(changes)})  # the names only, never the values
+            return self.json({"saved": sorted(changes), "restart": sorted(k for k in changes if envfile.BY_NAME[k][4]),
+                              "fields": envfile.status()})
+        if path == "/api/restart":  # after saving settings that only take effect on a fresh start
+            store.audit(actor, "server_restart", None, None)
+            self.json({"restarting": True})
+            threading.Thread(target=_restart_soon, daemon=True).start()
+            return None
 
         if path == "/api/scan":
             text = (data.get("text") or "").strip()
@@ -478,14 +506,16 @@ def discovery_loop():
 
 def main():
     global pool
-    missing = config.missing()
-    if missing:
-        raise SystemExit(f"Missing in .env: {', '.join(missing)}")
     ap = argparse.ArgumentParser()
     ap.add_argument("--agents", type=int, default=config.AGENT_COUNT)
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--host", default="127.0.0.1")
     args = ap.parse_args()
+    missing = config.missing()
+    if missing:  # first run: a setup page to enter the keys, then the server restarts itself
+        print(f"Missing in .env: {', '.join(missing)}")
+        print(f"Kashshaf setup: open http://localhost:{args.port} on this computer to enter the keys")
+        return _listen(args.host, args.port, SetupHandler).serve_forever()
     store.registry()  # fail fast if the database is unreachable
     pool = Pool(args.agents)
     if config.DISCOVERY_INTERVAL_MIN > 0:
@@ -494,7 +524,71 @@ def main():
           f"Claude agent {'ON (' + agent.MODEL + ')' if agent.enabled() else 'OFF'} | "
           f"Google {'ON' if config.SERPAPI_KEY else 'OFF'}")
     uaepass.configure(args.port)  # the simulated UAE PASS is served by this same server
-    ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
+    _listen(args.host, args.port, Handler).serve_forever()
+
+
+def _listen(host: str, port: int, handler) -> ThreadingHTTPServer:
+    """Bind the port; after a self-restart the old process may hold it for a moment."""
+    for _ in range(40):
+        try:
+            return ThreadingHTTPServer((host, port), handler)
+        except OSError:
+            time.sleep(0.25)
+    return ThreadingHTTPServer((host, port), handler)
+
+
+def _restart_soon():
+    """Start a fresh server with the new .env, then leave (after the answer reached the browser)."""
+    time.sleep(0.8)
+    subprocess.Popen([sys.executable] + sys.argv, cwd=str(ROOT))
+    os._exit(0)
+
+
+class SetupHandler(Handler):
+    """First run, while the Supabase keys are missing: only the setup page, and only for this computer.
+    The keys go straight into .env; nothing else of the server runs yet."""
+
+    def local(self) -> bool:
+        loopback = ("127.0.0.1", "::1", "localhost")
+        host = (urlsplit("//" + (self.headers.get("Host") or "")).hostname or "")
+        origin = self.headers.get("Origin")
+        # another website open in this browser must not be able to post keys here
+        return (self.client_address[0] in ("127.0.0.1", "::1") and host in loopback
+                and (not origin or urlsplit(origin).hostname in loopback))
+
+    def route_get(self):
+        path = urlsplit(self.path).path
+        if not self.local():
+            return self.json({"error": "setup is open only on the computer running Kashshaf"}, 403)
+        if path.startswith("/assets/"):
+            return self.static(path.lstrip("/"))
+        if path == "/api/setup":
+            return self.json({"fields": envfile.status(), "missing": envfile.missing_required()})
+        if path.startswith("/api/"):
+            return self.json({"error": "setup first"}, 503)
+        return self.static("setup.html")
+
+    def route_post(self):
+        path = urlsplit(self.path).path
+        if not self.local():
+            return self.json({"error": "setup is open only on the computer running Kashshaf"}, 403)
+        data = self.body()
+        if path == "/api/setup/test":
+            return self.json(envfile.test(data.get("group", ""), data.get("values") or {}))
+        if path == "/api/setup/save":
+            changes, errors = envfile.clean(dict(data.get("values") or {}))
+            if errors:
+                return self.json({"error": "invalid", "errors": errors}, 400)
+            check = envfile.test("supabase", changes)  # the server cannot start without its database
+            if not check["ok"]:
+                return self.json({"error": "supabase", "test": check}, 400)
+            envfile.write(changes)
+            if envfile.missing_required():
+                return self.json({"error": "missing", "missing": envfile.missing_required()}, 400)
+            self.json({"saved": sorted(changes), "restarting": True})
+            threading.Thread(target=_restart_soon, daemon=True).start()
+            return None
+        return self.json({"error": "setup first"}, 503)
 
 
 if __name__ == "__main__":

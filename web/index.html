@@ -185,7 +185,10 @@
       <section data-view="settings" hidden>
         <div class="card set-top">
           <div class="set-sum" id="setSummary"></div>
-          <button class="btn outline" id="setRefresh" type="button"><i data-icon="refresh"></i><span data-i18n="set.refresh"></span></button>
+          <div class="set-actions">
+            <button class="btn primary" id="keysBtn" type="button"><i data-icon="key"></i><span data-i18n="set.keys"></span></button>
+            <button class="btn outline" id="setRefresh" type="button"><i data-icon="refresh"></i><span data-i18n="set.refresh"></span></button>
+          </div>
         </div>
         <div class="card-head"><div><h3 data-i18n="set.services"></h3><p data-i18n="set.services.d"></p></div></div>
         <div class="services" id="services"></div>
@@ -307,9 +310,15 @@
 </div>
 
 <dialog id="detail" class="detail"><div id="detailBody"></div></dialog>
+<dialog id="keysDlg" class="detail keys-dlg" aria-labelledby="keysTitle">
+  <div class="detail-head"><div><b id="keysTitle" data-i18n="keys.title"></b><small data-i18n="keys.sub"></small></div><button class="btn ghost-dark sm" id="keysClose" type="button" data-i18n="close"></button></div>
+  <div class="detail-body" id="keysBody"></div>
+  <div class="keys-restart" id="keysRestart" hidden><span data-i18n="keys.restartNote"></span><button class="btn outline sm" id="keysRestartBtn" type="button" data-i18n="keys.restartBtn"></button></div>
+</dialog>
 
 <script src="/assets/hq/chars.js"></script>
 <script src="/assets/i18n.js"></script>
+<script src="/assets/keys.js"></script>
 <script src="/assets/app.js"></script>
 </body>
 </html>

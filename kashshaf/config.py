@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def _load_env(path: Path) -> None:
     if not path.exists():
         return
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -16,7 +16,9 @@ def _load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-_load_env(ROOT / ".env")
+# KASHSHAF_ENV_FILE points at another settings file (a second instance, a deployment); default .env here
+ENV_FILE = Path(os.environ.get("KASHSHAF_ENV_FILE") or ROOT / ".env")
+_load_env(ENV_FILE)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "")

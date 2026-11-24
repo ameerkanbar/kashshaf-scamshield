@@ -27,6 +27,16 @@ precaution, until an analyst reviews them and decides: safe (unblock), official
 
 ## Setup
 
+**Quickest way: from the browser.** Run `python server.py` with no `.env`: instead of stopping, Kashshaf opens a
+setup page at http://localhost:8080 (only on the computer running it). Paste your Supabase project URL and keys
+(and, optionally, Claude and SerpAPI), press «اختبار الاتصال», then save: the keys go into `.env` and the server
+restarts itself into the dashboard. A new Supabase project first needs the tables: in its SQL Editor, run the
+files in `supabase/migrations` in order. Later, **Settings → إدارة المفاتيح** edits every key and setting the same
+way (secrets are never shown back, an empty box keeps the current key, each service has a free connection test).
+`KASHSHAF_ENV_FILE` points a server at another settings file (e.g. a second instance).
+
+Or by hand:
+
 1. Fill in `.env` (copy of `.env.example`):
    - `SUPABASE_SECRET_KEY`: Supabase dashboard → Project Settings → API Keys → secret key
    - `ANTHROPIC_API_KEY`: console.anthropic.com

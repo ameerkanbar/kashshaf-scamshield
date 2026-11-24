@@ -31,6 +31,7 @@
     refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>',
     review: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
     crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
+    key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3L21 2M17 6l3 3M14.5 8.5l2.5 2.5"/>',
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
     target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>', hand: '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.5L8 15"/>',
   };
@@ -60,6 +61,41 @@
     const t0 = performance.now();
     const step = (now) => { const k = Math.min(1, (now - t0) / 700); el.textContent = Math.round(from + (to - from) * (1 - (1 - k) ** 3)).toLocaleString("en") + sfx; if (k < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step);
+  }
+
+  /* ---------------- shimmer skeletons: the shape of what is loading, never a spinner ---------------- */
+  const W = [92, 78, 64, 85, 70, 55, 88, 60]; // varied line widths look like real text
+  const skLine = (w = 80, cls = "") => `<span class="sk sk-line ${cls}" style="width:${w}%"></span>`;
+  const skRows = (rows, cols) => Array.from({ length: rows }, (_, r) => `<tr class="sk-row" aria-hidden="true">${Array.from({ length: cols }, (_, c) =>
+    `<td>${c === 0 ? '<span class="sk sk-pill"></span>' : skLine(W[(r + c) % W.length])}</td>`).join("")}</tr>`).join("");
+  const skKpis = (n) => Array.from({ length: n }, (_, i) => `<div class="sk-card" aria-hidden="true"><span class="sk sk-circle"></span>${skLine(40, "lg")}${skLine(W[i % W.length] - 20, "sm")}</div>`).join("");
+  const skCards = (n, block = false) => Array.from({ length: n }, (_, i) => `<div class="sk-card" aria-hidden="true">${skLine(45, "lg")}${skLine(W[i % W.length])}${skLine(W[(i + 3) % W.length])}${block ? '<span class="sk sk-block" style="margin-top:12px"></span>' : ""}</div>`).join("");
+  const skList = (n) => `<ul class="sk-list" aria-hidden="true">${Array.from({ length: n }, (_, i) => `<li><span class="sk sk-pill"></span>${skLine(W[i % W.length])}</li>`).join("")}</ul>`;
+  const skEvidence = () => `<div class="sk-ev" aria-hidden="true"><span class="sk sk-block"></span><div>${Array.from({ length: 7 }, (_, i) => skLine(W[i % W.length])).join("")}</div></div>`;
+  const skDetail = () => `<div class="detail-head"><div><span class="sk sk-pill"></span></div><button class="btn ghost-dark sm" type="button" onclick="this.closest('dialog').close()">${esc(t("close"))}</button></div><div class="sk-detail" aria-busy="true" aria-label="${esc(t("loading"))}">
+      ${skLine(70, "sm")}<span class="sk sk-block" style="height:70px"></span>${skLine(30, "lg")}${skLine(90)}${skLine(75)}${skLine(82)}
+      <div class="sk-two"><span class="sk sk-block"></span><span class="sk sk-block"></span></div>${skLine(30, "lg")}${skEvidence()}</div>`;
+  const skForm = () => `<div aria-busy="true" aria-label="${esc(t("loading"))}">${Array.from({ length: 3 }, () => `<div class="sk-card" style="margin-bottom:14px">${skLine(35, "lg")}${skLine(80, "sm")}
+      <div class="sk-two" style="margin-top:12px">${Array.from({ length: 4 }, () => `<div>${skLine(40, "sm")}<span class="sk" style="height:38px;border-radius:10px"></span></div>`).join("")}</div></div>`).join("")}</div>`;
+  // first visit of a page: its tables, cards and numbers start as skeletons until the data arrives
+  const SKELETONS = {
+    ops: { "#opsKpis": () => skKpis(4), "#feed": () => skList(7) },
+    analytics: { "#anKpis": () => skKpis(5) },
+    org: { "#orgKpis": () => skKpis(4) },
+    agents: { "#agKpis": () => skKpis(4), "#agentsBody": () => skRows(8, 9) },
+    findings: { "#findingsBody": () => skRows(8, 7) },
+    review: { "#reviewBody": () => skCards(3) },
+    blocked: { "#blockedBody": () => skRows(8, 9) },
+    gangs: { "#gangsList": () => skCards(2, true) },
+    discover: { "#searchLogBody": () => skRows(6, 7) },
+    audit: { "#auditBody": () => skRows(8, 4) },
+    settings: { "#setSummary": () => skLine(45, "lg"), "#services": () => skCards(6), "#configBody": () => skRows(6, 2) },
+  };
+  const skShown = new Set();
+  function skeletonFor(p) {
+    if (skShown.has(p)) return;
+    skShown.add(p);
+    Object.entries(SKELETONS[p] || {}).forEach(([sel, make]) => { const el = $(sel); if (el) { el.innerHTML = make(); delete el.dataset.key; } });
   }
 
   /* ---------------- auth ---------------- */
@@ -121,7 +157,7 @@
     $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === page || (page === "live" && a.dataset.page === "org")));
     $$("[data-view]").forEach((v) => (v.hidden = v.dataset.view !== page));
     header(); $("#app").classList.remove("menu-open");
-    loadPage(); window.scrollTo({ top: 0 });
+    skeletonFor(page); loadPage(); window.scrollTo({ top: 0 });
   }
   const header = () => { $("#pageTitle").textContent = t(`page.${page}`); $("#pageSub").textContent = t(`page.${page}.sub`); document.title = `${t(`page.${page}`)} | ${t("brand")}`; };
   window.addEventListener("hashchange", route);
@@ -231,7 +267,7 @@
   function upsert(id, make, update) {
     const el = document.getElementById(id); if (!el) return;
     if (charts[id]) { update(charts[id]); charts[id].update(); return; }
-    chartDefaults(); charts[id] = new Chart(el, make());
+    chartDefaults(); charts[id] = new Chart(el, make()); el.parentElement?.classList.add("ready");
   }
   function activityChart(id) {
     const tl = insights.timeline, labels = tl.map((h) => new Date(h.hour).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
@@ -532,7 +568,7 @@
   let services = null, settingsCfg = null, servicesAt = 0;
   async function loadSettings(force) {
     if (!force && services && Date.now() - servicesAt < 60000) return renderSettings(); // checks hit outside services: at most once a minute
-    $("#setRefresh").disabled = true; $("#setSummary").innerHTML = `<span class="spin"></span> ${esc(t("set.checking"))}`;
+    $("#setRefresh").disabled = true; $("#setSummary").innerHTML = skLine(45, "lg"); $$(".svc").forEach((x) => x.classList.add("is-loading"));
     try { const r = await api("/api/integrations"); services = r.services; settingsCfg = r.settings; servicesAt = Date.now(); }
     finally { $("#setRefresh").disabled = false; }
     renderSettings();
@@ -558,7 +594,7 @@
       <div class="row"><button class="btn outline sm" data-test="${esc(s.id)}" type="button"${s.status === "off" ? " disabled" : ""}>${esc(t(s.id === "claude" ? "set.testPaid" : "set.test"))}</button><span class="muted">${time(s.checked_at)}</span></div>
     </div>`).join("");
     $$("[data-test]").forEach((b) => (b.onclick = async () => {
-      b.disabled = true; b.innerHTML = `<span class="spin"></span> ${esc(t("set.checking"))}`;
+      b.disabled = true; b.textContent = t("set.checking"); b.closest(".svc")?.classList.add("is-loading");
       try { const r = await api("/api/integrations/test", { id: b.dataset.test }); services = services.map((x) => (x.id === r.id ? r : x)); }
       catch (e) { services = services.map((x) => (x.id === b.dataset.test ? { ...x, status: "error", error: e.message } : x)); }
       renderSettings();
@@ -570,6 +606,46 @@
     paintIcons($("#settings") || document);
   }
   $("#setRefresh").onclick = () => loadSettings(true).catch((e) => ($("#setSummary").textContent = e.message));
+
+  // ---- Settings -> Keys: every service key, saved to .env on the server and applied at once ----
+  async function keysCall(path, body) { // like api(), but a refusal keeps its details (which field, which test)
+    const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 401) { showLogin(); throw new Error(t("err.session")); }
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { body: data });
+    return data;
+  }
+  $("#keysBtn").onclick = async () => {
+    const body = $("#keysBody");
+    $("#keysRestart").hidden = true;
+    body.innerHTML = skForm();
+    $("#keysDlg").showModal();
+    let fields;
+    try { fields = (await keysCall("/api/keys")).fields; } catch (e) { body.innerHTML = `<p class="msg err">${esc(e.message)}</p>`; return; }
+    window.KashshafKeys.mount(body, {
+      fields, lang,
+      test: (group, values) => keysCall("/api/keys/test", { group, values }),
+      save: (values) => keysCall("/api/keys", { values }),
+      onSaved: (r) => {
+        if (r.restart?.length) $("#keysRestart").hidden = false;
+        if (r.saved?.some((k) => k === "SUPABASE_URL" || k === "SUPABASE_PUBLISHABLE_KEY")) { // the browser's login belongs to the old database
+          alert(t("keys.relogin")); dropKsf(); sb.auth.signOut().finally(() => location.reload()); return;
+        }
+        services = null; loadSettings(true).catch(() => {}); refreshState();
+      },
+    });
+  };
+  $("#keysClose").onclick = () => $("#keysDlg").close();
+  $("#keysDlg").addEventListener("click", (e) => { if (e.target === $("#keysDlg")) $("#keysDlg").close(); });
+  $("#keysRestartBtn").onclick = async (e) => {
+    if (!confirm(t("keys.confirmRestart"))) return;
+    e.target.disabled = true; e.target.textContent = t("keys.restarting");
+    try { await api("/api/restart", {}); } catch { /* the server may close the connection while restarting */ }
+    for (let i = 0; i < 60; i++) { // wait until the new server answers, then reload
+      await new Promise((r) => setTimeout(r, 1000));
+      try { if ((await fetch("/api/config", { cache: "no-store" })).ok) { location.reload(); return; } } catch { /* still starting */ }
+    }
+  };
 
   // agents page
   function renderAgents() {
@@ -629,7 +705,7 @@
       <p class="muted" dir="auto">${esc((lastScan.text || "").slice(0, 240))}</p>
       <div class="overall ${overall[0]}">${overall[0] === "pending" && waiting ? '<span class="spin"></span>' : icon(overall[0] === "fraud" ? "alert" : "shield")}${esc(overall[1])}</div>
       ${items.map((x) => {
-        if (x.pending) return `<div class="scan-link"><div class="head"><span class="spin"></span><b>${x.status === "checking" ? esc(t("scan.checking", { a: (x.agent || "").split("@")[0] })) : t("scan.queued")}</b></div><span class="url">${esc(x.url)}</span></div>`;
+        if (x.pending) return `<div class="scan-link"><div class="head"><span class="spin"></span><b>${x.status === "checking" ? esc(t("scan.checking", { a: (x.agent || "").split("@")[0] })) : t("scan.queued")}</b></div><span class="url">${esc(x.url)}</span><div aria-hidden="true">${skLine(72, "sm")}${skLine(48, "sm")}</div></div>`;
         const v = x.result || { verdict: "unreachable", score: 0, reasons: [] };
         const e = ent(v) ? (v.verdict === "official" ? t("officialof", { e: ent(v) }) : ["fraud", "suspicious"].includes(v.verdict) ? t("impersonates", { e: ent(v) }) : ent(v)) : "";
         return `<div class="scan-link ${esc(v.verdict)}"><div class="head">${pill(v.verdict)}<b class="num">${v.score}/100</b>${v.blocked ? `<span class="tag red">${t("blockedTag")}</span>` : ""}${v.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}${fromDb.has(x.url_id) ? `<span class="tag">${t("scan.fromdb")}</span>` : ""}</div>
@@ -828,7 +904,7 @@
   let detailSeq = 0;
   async function openDetail(id, quiet = false) {
     const seq = ++detailSeq;
-    if (!quiet) $("#detailBody").innerHTML = `<div class="detail-body"><span class="spin"></span> ${t("loading")}</div>`;
+    if (!quiet) $("#detailBody").innerHTML = skDetail();
     if (!$("#detail").open) $("#detail").showModal();
     const d = await api(`/api/finding?id=${id}`);
     if (seq !== detailSeq) return; // another link was opened meanwhile
@@ -849,8 +925,8 @@
           <div><h5>${icon("eye")} ${t("d.scanner")}</h5><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div></div>
         <h4>${t("d.fp")}</h4><div>${d.fingerprints.map((f) => `<span class="tag u">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || `<span class="muted">${t("none")}</span>`}</div>
         <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
-        <h4>${t("rep.title")}</h4><div id="reportsBox"><p class="muted"><span class="spin"></span> ${t("loading")}</p></div>
-        <h4>${t("ev.title")}</h4><div id="evidenceBox" class="evidence"><p class="muted"><span class="spin"></span> ${t("ev.loading")}</p></div>
+        <h4>${t("rep.title")}</h4><div id="reportsBox">${skList(2)}</div>
+        <h4>${t("ev.title")}</h4><div id="evidenceBox" class="evidence" aria-busy="true">${skEvidence()}</div>
         <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn ok sm" data-ov="allow" type="button">${t("d.allow")}</button>
           ${v.claimed_entity_id ? `<button class="btn outline sm" data-ov="official" type="button">${t("d.official")}</button>` : ""}
           <button class="btn outline sm" data-ov="" type="button">${t("d.clear")}</button><button class="btn outline sm" id="rescan" type="button">${t("d.rescan")}</button>
