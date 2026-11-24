@@ -241,24 +241,37 @@ def screenshot(url: str, scale: int = 2) -> tuple[bytes | None, str | None]:
         return None, "internal address: not opened"
     tmp = tempfile.mkdtemp(prefix="kashshaf-shot-")
     out = os.path.join(tmp, "shot.png")
+    base = [exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio",
+            "--no-first-run", "--no-default-browser-check", "--disable-extensions",
+            "--disable-default-apps", "--disable-sync", "--disable-background-networking",
+            # desktop Chrome keeps windows at least ~500px wide; narrower crops the page
+            f"--user-data-dir={os.path.join(tmp, 'profile')}", "--window-size=500,1000",
+            f"--force-device-scale-factor={scale}", f"--user-agent={fetcher.PHONE_UA + (' KashshafScan' if '.localhost' in url.split('/')[2] else '')}",
+            "--lang=ar-AE", "--accept-lang=ar-AE,en-AE"]
+    # 1st try: virtual time, so pages that draw themselves with scripts are finished. A page that never goes
+    # quiet (live timers, endless requests, bot checks) freezes virtual time and Chrome hangs, so then
+    # 2nd try: real time, loading stopped after 15 s and the screen taken as it stands.
+    tries = (("--virtual-time-budget=5000", 25), ("--timeout=15000", 40))
+    stderr, timed_out = "", False
     try:
         with _chrome_slots:
-            run = subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio",
-                                  "--no-first-run", "--no-default-browser-check", "--disable-extensions",
-                                  "--disable-default-apps", "--disable-sync", "--disable-background-networking",
-                                  # desktop Chrome keeps windows at least ~500px wide; narrower crops the page
-                                  f"--user-data-dir={os.path.join(tmp, 'profile')}", "--window-size=500,1000",
-                                  f"--force-device-scale-factor={scale}", f"--user-agent={fetcher.PHONE_UA + (' KashshafScan' if '.localhost' in url.split('/')[2] else '')}",
-                                  "--lang=ar-AE", "--accept-lang=ar-AE,en-AE", "--virtual-time-budget=5000",
-                                  f"--screenshot={out}", url], capture_output=True, text=True, timeout=45)
-        if os.path.exists(out) and os.path.getsize(out) > 0:
-            with open(out, "rb") as f:
-                return f.read(), None
+            for flag, limit in tries:
+                try:
+                    run = subprocess.run(base + [flag, f"--screenshot={out}", url], capture_output=True, text=True, timeout=limit)
+                    stderr = run.stderr or ""
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+                    continue
+                if os.path.exists(out) and os.path.getsize(out) > 0:
+                    with open(out, "rb") as f:
+                        return f.read(), None
+                if re.search(r"Page load failed", stderr):
+                    break  # a dead page stays dead: no second try
         # Chrome takes no screenshot of a page that failed (an HTTP error, a dead site): say why
-        failed = re.search(r"Page load failed: (\S+)", run.stderr or "")
-        return None, f"the page did not load ({failed.group(1)})" if failed else "Chrome did not produce a screenshot"
-    except subprocess.TimeoutExpired:
-        return None, "the screenshot timed out"
+        failed = re.search(r"Page load failed: (\S+)", stderr)
+        if failed:
+            return None, f"the page did not load ({failed.group(1)})"
+        return None, "the screenshot timed out: the page kept loading" if timed_out else "Chrome did not produce a screenshot"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

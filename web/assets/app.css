@@ -569,3 +569,13 @@ details.tbl table { margin-top: 8px; }
 .report-item { border: 1px solid #ececec; border-inline-start: 4px solid #d03b3b; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
 .report-item .meta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted, #667085); }
 .verified { color: #0a7d0a; font-weight: 700; font-size: 12px; }
+
+/* Where the site stands now in the detail dialog (the analyst's decision included) */
+.site-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 13px; }
+.ok-tag { color: #0a7d0a; font-weight: 700; }
+
+/* Why the screenshot is missing, in plain words, with a retry */
+.evidence-why { background: #fffaeb; border: 1px solid #fedf89; border-inline-start: 4px solid #dc6803; border-radius: 10px; padding: 10px 14px; margin: 0 0 12px; font-size: 13px; color: #7a2e0e; }
+.evidence-why p { margin: 4px 0; }
+.evidence-why .tech { font: 11px ui-monospace, Menlo, monospace; color: #98a2b3; }
+.evidence-why .btn { margin-top: 6px; }

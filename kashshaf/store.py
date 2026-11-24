@@ -238,8 +238,12 @@ def scan_result(ids: list[int]) -> list[dict]:
 
 def finding_detail(url_id: int) -> dict:
     url = supa.select("urls", id=f"eq.{url_id}", select="*")[0]
+    site = domain_status(url["domain"]) or {}
     return {
         "url": url,
+        # where the site stands now, the analyst's decision included (the verdicts below are the agents')
+        "site": {"override": site.get("override"), "override_by": site.get("override_by"),
+                 "blocked": is_blocked(site) if site else False, "pending_review": pending_review(site)},
         "verdicts": supa.select("verdicts", url_id=f"eq.{url_id}", select="*", order="created_at.desc", limit="5"),
         "scans": supa.select("scans", url_id=f"eq.{url_id}", select="*", order="started_at.desc", limit="3"),
         "sightings": supa.select("url_sightings", url_id=f"eq.{url_id}", select="*", order="seen_at.desc", limit="50"),

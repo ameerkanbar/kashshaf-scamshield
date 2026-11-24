@@ -335,25 +335,43 @@
   }
 
   // findings
-  const findingRow = (f) => `<tr>
-    <td>${pill(f.verdict)}<div class="sub num">${f.score}/100</div><div class="scorebar"><i style="width:${f.score}%"></i></div>${f.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}</td>
+  // What a person meets now: the analyst's decision wins over the agents' verdict (block = fraud, allow = safe).
+  const shownVerdict = (f) => (f.override === "block" ? "fraud" : f.override === "allow" && ["fraud", "suspicious"].includes(f.verdict) ? "safe" : f.verdict);
+  const findingRow = (f) => `<tr data-domain="${esc(f.domain)}">
+    <td>${pill(shownVerdict(f))}${shownVerdict(f) !== f.verdict ? `<div class="sub">${esc(t("rev.was", { v: t("v." + f.verdict) }))}</div>` : ""}<div class="sub num">${f.score}/100</div><div class="scorebar"><i style="width:${f.score}%"></i></div>${f.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}</td>
     <td>${time(f.created_at)}</td>
     <td><span class="url">${esc(f.url)}</span><div class="sub">${esc(f.title || "")}</div></td>
     <td>${esc(ent(f) || "—")}</td>
     <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div>${f.reports ? `<div class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</div>` : ""}</td>
     <td>${f.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span><div class="sub">${t("rev.pendingSub")}</div>` : f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("rev.decided", { d: t("rev.d." + (f.override === "block" ? "block" : "allow")) })}</div>` : ""}</td>
     <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
+  let findingRows = [], findingsSeq = 0;
+  const renderFindings = () => { $("#findingsBody").innerHTML = findingRows.map(findingRow).join("") || `<tr><td colspan="7" class="empty">${t("noResults")}</td></tr>`; };
   async function loadFindings() {
+    const seq = ++findingsSeq; // a slower, older load must never paint over a newer one (e.g. right after a decision)
     const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort });
     const rows = await api(`/api/findings?${q}`);
-    $("#findingsBody").innerHTML = rows.map(findingRow).join("") || `<tr><td colspan="7" class="empty">${t("noResults")}</td></tr>`;
+    if (seq !== findingsSeq) return;
+    findingRows = rows; renderFindings();
+  }
+  // An analyst's decision shows at once on every list, before the server answers; the reload then confirms it.
+  function applyDecision(domain, action) {
+    findingsSeq++; blockedSeq++; reviewSeq++; // loads already on the way carry the old state
+    const patch = (r) => r.domain === domain && Object.assign(r, { override: action, pending_review: !action && r.verdict === "suspicious",
+      blocked: action === "block" ? true : action === "allow" || action === "official" ? false : r.blocked });
+    findingRows.forEach(patch); renderFindings();
+    if (action === "allow" || action === "official") blockedRows = blockedRows.filter((b) => b.domain !== domain);
+    else blockedRows.forEach(patch);
+    renderBlocked();
+    $$(`#reviewBody [data-domain="${CSS.escape(domain)}"]`).forEach((b) => b.closest("article")?.remove());
   }
   let ft; $("#search").addEventListener("input", () => { clearTimeout(ft); ft = setTimeout(loadFindings, 300); });
   $("#verdictFilter").onchange = loadFindings;
 
   // blocked
   let blockedRows = [];
-  async function loadBlocked() { blockedRows = await api(`/api/blocked?sort=${sort}`); renderBlocked(); }
+  let blockedSeq = 0;
+  async function loadBlocked() { const seq = ++blockedSeq; const rows = await api(`/api/blocked?sort=${sort}`); if (seq !== blockedSeq) return; blockedRows = rows; renderBlocked(); }
   function renderBlocked() {
     const q = $("#blockedSearch").value.trim().toLowerCase();
     const rows = blockedRows.filter((b) => !q || b.domain.includes(q) || (b.entity_ar || "").includes(q) || (b.entity_en || "").toLowerCase().includes(q));
@@ -636,16 +654,21 @@
           <span>${time(f.created_at)}</span>${f.reports ? `<span class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</span>` : ""}</div></div>
       <div class="result-side"><div><span class="pending">⏳ ${esc(t("rev.pending"))}</span><div class="muted">${esc(t("rev.pendingSub"))}</div></div>
         <button class="btn outline sm" data-open="${f.url_id}" type="button">${esc(t("rev.evidence"))}</button>${decisionButtons(f.domain, f.claimed_entity_id)}</div></article>`;
+  let reviewSeq = 0;
   async function loadReview() {
+    const seq = ++reviewSeq;
     const rows = await api(`/api/findings?verdict=review&sort=${sort}`);
+    if (seq !== reviewSeq) return;
     const seen = new Set(), sites = rows.filter((f) => !seen.has(f.domain) && seen.add(f.domain)); // one card per site: its most dangerous link
     $("#reviewBody").innerHTML = sites.map(reviewCard).join("") || `<div class="card empty">${esc(t("rev.none"))}</div>`;
   }
   document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-decide]"); if (!b) return;
     b.closest(".decide").querySelectorAll("button").forEach((x) => (x.disabled = true));
-    try { await api("/api/override", { domain: b.dataset.domain, action: b.dataset.decide }); }
-    catch (err) { alert(err.message); }
+    const domain = b.dataset.domain, action = b.dataset.decide;
+    applyDecision(domain, action); // at once; the server's answer then confirms it
+    try { await api("/api/override", { domain, action }); }
+    catch (err) { alert(err.message); loadPage(); return; } // back to what the server holds
     refreshState(); loadPage();
   });
 
@@ -750,8 +773,22 @@
         <span id="evMsg" class="muted" role="status">${data.chrome ? "" : esc(t("ev.nochrome"))}</span></div>`;
     } else {
       const w = ev.whois || {}, h = ev.hosting || {}, errs = ev.errors || {};
-      box.innerHTML = `<div class="evidence-grid">
-          <div class="evidence-shot">${ev.screenshot_path ? `<img id="evShot" alt="${esc(t("ev.shotAlt"))}">` : `<div class="evidence-noshot">${esc(t("ev.noshot"))}${errs.screenshot ? `<span>${esc(errs.screenshot)}</span>` : ""}</div>`}</div>
+      // No screenshot this time: say in plain words what went wrong, and show the last good screenshot if any.
+      const shotEv = ev.screenshot_path ? ev : data.items.find((x) => x.screenshot_path);
+      const why = (e) => {
+        const m = /did not load \((.+)\)/.exec(e || "");
+        return /timed out/.test(e || "") ? t("ev.why.timeout") : m ? t("ev.why.failed", { e: m[1] }) : /internal address/.test(e || "") ? t("ev.why.internal")
+          : /Chrome was not found/.test(e || "") ? t("ev.nochrome") : /could not store/.test(e || "") ? t("ev.why.store") : t("ev.why.other");
+      };
+      const noShot = ev.screenshot_path ? "" : `<div class="evidence-why" role="status"><b>⚠ ${esc(t("ev.noshot"))}</b>
+          <p>${esc(why(errs.screenshot))}</p>
+          ${errs.page ? `<p class="muted">${esc(t("ev.siteSaid", { e: errs.page }))}</p>` : ""}
+          ${ev.final_url && !ev.final_url.includes(ev.domain) ?`<p class="muted">${esc(t("ev.wentTo"))} <span class="u" dir="ltr">${esc(ev.final_url)}</span></p>` : ""}
+          ${errs.screenshot ? `<p class="tech" dir="ltr">${esc(errs.screenshot)}</p>` : ""}
+          <button class="btn primary sm" id="evRetryShot" type="button">${esc(t("ev.retryShot"))}</button></div>`;
+      box.innerHTML = `${noShot}<div class="evidence-grid">
+          <div class="evidence-shot">${shotEv ? `<img id="evShot" alt="${esc(t("ev.shotAlt"))}">${shotEv !== ev ? `<div class="sub">${esc(t("ev.lastGood"))} ${time(shotEv.captured_at)}</div>` : ""}`
+            : `<div class="evidence-noshot">${esc(t("ev.noshot"))}</div>`}</div>
           <table class="evidence-table">${row("ev.at", time(ev.captured_at))}${row("ev.pageTitle", esc(ev.page_title || ""))}
             ${row("ev.registrar", esc(w.registrar || w.error || w.note || ""))}
             ${row("ev.created", w.created ? `${ltr(w.created)}${w.age_days != null ? esc(t("ev.age", { n: w.age_days })) : ""}` : "")}
@@ -775,7 +812,8 @@
           else { const a = document.createElement("a"); a.href = url; a.download = `kashshaf-report-${urlId}.html`; a.click(); say(t("ev.savedHtml")); }
         } catch (e) { if (win) win.close(); say(e.message); }
       };
-      if (ev.screenshot_path) apiRaw(`/api/evidence_file?id=${ev.id}&kind=screenshot`).then((r) => r.blob()).then((b) => { const img = $("#evShot"); if (img) img.src = URL.createObjectURL(b); }).catch(() => {});
+      if ($("#evRetryShot")) $("#evRetryShot").onclick = () => $("#evCapture").click();
+      if (shotEv) apiRaw(`/api/evidence_file?id=${shotEv.id}&kind=screenshot`).then((r) => r.blob()).then((b) => { const img = $("#evShot"); if (img) img.src = URL.createObjectURL(b); }).catch(() => {});
     }
     $("#evCapture").onclick = async (e) => {
       e.target.disabled = true; const m = $("#evMsg"); if (m) m.textContent = t("ev.capturing");
@@ -787,13 +825,21 @@
   /* ---------------- detail dialog ---------------- */
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) openDetail(+b.dataset.open); });
   $("#detail").addEventListener("click", (e) => { if (e.target === $("#detail")) $("#detail").close(); });
-  async function openDetail(id) {
-    $("#detailBody").innerHTML = `<div class="detail-body"><span class="spin"></span> ${t("loading")}</div>`;
+  let detailSeq = 0;
+  async function openDetail(id, quiet = false) {
+    const seq = ++detailSeq;
+    if (!quiet) $("#detailBody").innerHTML = `<div class="detail-body"><span class="spin"></span> ${t("loading")}</div>`;
     if (!$("#detail").open) $("#detail").showModal();
     const d = await api(`/api/finding?id=${id}`);
+    if (seq !== detailSeq) return; // another link was opened meanwhile
     const v = d.verdicts[0] || {}, s = d.scans[0] || {}, pv = s.phone_view || {}, bv = s.bot_view || {}, domain = d.url.domain;
-    $("#detailBody").innerHTML = `<div class="detail-head"><div>${pill(v.verdict || "unreachable")} <span class="u">${esc(d.url.url)}</span></div><button class="btn ghost-dark sm" id="closeDetail" type="button">${t("close")}</button></div>
+    const site = d.site || {}, now = shownVerdict({ verdict: v.verdict || "unreachable", override: site.override });
+    const status = site.pending_review ? `<span class="pending">⏳ ${esc(t("rev.pending"))}</span>`
+      : site.override ? `<span class="${site.blocked ? "blocked" : "ok-tag"}">${esc(t("rev.decided", { d: t("rev.d." + (site.override === "block" ? "block" : "allow")) }))}${site.override_by ? ` · ${esc(site.override_by)}` : ""}</span>`
+      : site.blocked ? `<span class="blocked">${esc(t("blockedTag"))}</span>` : "";
+    $("#detailBody").innerHTML = `<div class="detail-head"><div>${pill(now)} <span class="u">${esc(d.url.url)}</span></div><button class="btn ghost-dark sm" id="closeDetail" type="button">${t("close")}</button></div>
       <div class="detail-body">
+        ${status || now !== v.verdict ? `<div class="site-status">${status}${now !== v.verdict && v.verdict ? ` <span class="muted">${esc(t("rev.was", { v: t("v." + v.verdict) }))}</span>` : ""}</div>` : ""}
         <p class="muted">${t("d.meta", { s: v.score ?? "—", m: esc(v.model === "rules" || v.model === "database" ? t("by." + v.model) : v.model || t("by.registry")), t: "" })}${time(v.created_at)} · ${esc(s.agent || "")} · ${t("d.firstSeen")} ${time(d.url.first_seen)}${s.domain_created ? ` · ${t("d.domainAge")} ${esc(s.domain_created)}` : ""}</p>
         ${v.ai?.summary_ar || v.ai?.summary_en ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`] || v.ai.summary_ar)}</div>` : ""}
         ${visualBox(v.ai)}
@@ -815,8 +861,23 @@
     $("#closeDetail").onclick = () => $("#detail").close();
     $("#rescan").onclick = async () => { await api("/api/rescan", { url: d.url.url }); $("#detailMsg").textContent = t("d.rescanned"); };
     $$("[data-ov]", $("#detailBody")).forEach((b) => (b.onclick = async () => {
-      try { await api("/api/override", { domain, action: b.dataset.ov || null }); } catch (err) { $("#detailMsg").textContent = err.message; $("#detailMsg").className = "msg err"; return; }
-      $("#detailMsg").textContent = t("d.saved"); refreshState(); loadPage();
+      const action = b.dataset.ov || null;
+      $$("[data-ov]", $("#detailBody")).forEach((x) => (x.disabled = true));
+      // show the decision at once, here and on the lists; the server's answer then confirms (or undoes) it
+      applyDecision(domain, action);
+      const shown = action === "block" ? "fraud" : action ? (["fraud", "suspicious"].includes(v.verdict) ? "safe" : v.verdict) : v.verdict;
+      const head = $(".detail-head .pill", $("#detailBody")); if (head) head.outerHTML = pill(shown || "unreachable");
+      const box = $(".site-status", $("#detailBody")) || $(".detail-body", $("#detailBody")).insertAdjacentElement("afterbegin", Object.assign(document.createElement("div"), { className: "site-status" }));
+      box.innerHTML = action ? `<span class="${action === "block" ? "blocked" : "ok-tag"}">${esc(t("rev.decided", { d: t("rev.d." + (action === "block" ? "block" : "allow")) }))}</span>` : `<span class="spin"></span>`;
+      $("#detailMsg").className = "msg"; $("#detailMsg").textContent = t("saving");
+      try { await api("/api/override", { domain, action }); } catch (err) {
+        loadPage(); await openDetail(id, true); // back to what the server holds
+        if ($("#detailMsg")) { $("#detailMsg").textContent = err.message; $("#detailMsg").className = "msg err"; }
+        return;
+      }
+      refreshState(); loadPage();
+      await openDetail(id, true); // redraw from the server, now with the decision saved
+      if ($("#detailMsg")) $("#detailMsg").textContent = t("d.saved");
     }));
     loadEvidence(d.url.id);
     loadReports(domain);
