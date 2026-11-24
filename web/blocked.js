@@ -6,7 +6,8 @@
 
   // A victim reports the site with a verified identity (UAE PASS). Only on the server's page: the extension's copy has no link.
   const report = document.getElementById("reportLink");
-  if (report && blocked) report.href = "/report/start?url=" + encodeURIComponent(blocked);
+  const inExtension = location.protocol === "chrome-extension:";
+  if (report && blocked && !inExtension) report.href = "/report/start?url=" + encodeURIComponent(blocked);
   else if (report) report.closest(".report").style.display = "none";  // a style beats the hidden attribute
 
   // Suspicious, not yet confirmed: blocked as a precaution while an analyst reviews it.

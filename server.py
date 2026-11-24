@@ -144,6 +144,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/hq":
             return self.static("hq.html")
         if path == "/blocked":
+            # The server decides which message the person sees, however the page was opened (gateway, dashboard,
+            # an old shared link): suspicious sites get "under review, blocked until the police decide", not "fraud".
+            target = q.get("url", "")
+            if target:
+                try:
+                    review = store.pending_review(store.domain_status(store.host_of(target)))
+                except Exception as e:  # the database is unreachable: show the page as it was asked for
+                    print(f"[blocked] status lookup failed: {e}")
+                    review = q.get("review") == "1"
+                if review != (q.get("review") == "1"):
+                    return self.redirect(f"/blocked?url={quote(target, safe='')}" + ("&review=1" if review else ""))
             return self.static("blocked.html")
         if path == "/report":
             return self.static("report.html")
@@ -185,7 +196,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/config":
             return self.json({"supabase_url": config.SUPABASE_URL, "supabase_key": config.SUPABASE_PUBLISHABLE_KEY})
         if path == "/api/blocklist":
-            return self.json({"domains": store.blocklist()})
+            # review: blocked domains still waiting for an analyst, so the extension shows "under review" for them
+            return self.json({"domains": store.blocklist(), "review": sorted({r["domain"] for r in store.review_queue()})})
         if path == "/api/check":
             return self.json(self.check(q.get("url", "")))
         if path == "/go":
