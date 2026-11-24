@@ -250,8 +250,18 @@ html[dir="rtl"] .feed li.new { animation-name: slide-rtl; }
 .search { position: relative; flex: 1; min-width: 220px; }
 .search [data-icon] { position: absolute; top: 50%; transform: translateY(-50%); inset-inline-start: 12px; width: 18px; height: 18px; color: var(--muted); }
 .search input { width: 100%; padding-inline-start: 38px; }
-.table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--line); }
+/* Tables fit the page: no sideways scrolling. Long text is shortened (.clip); on narrow screens a row becomes a card. */
+.table-wrap { overflow: hidden; border-radius: 12px; border: 1px solid var(--line); }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+.table td { overflow-wrap: anywhere; }
+.table th { white-space: normal; }
+.table .ts { white-space: normal; display: inline-block; min-width: 9ch; } /* date over time, not one wide line */
+.table .decide .btn { white-space: normal; text-align: center; }
+.table td .url, .table td .u { word-break: normal; overflow-wrap: anywhere; }
+.clip { cursor: pointer; border-bottom: 1px dotted #98a2b3; }
+.clip:hover { color: var(--blue); border-bottom-color: var(--blue); }
+.clip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
+.clip.open { border-bottom-style: solid; }
 .table th { background: var(--sky-2); color: var(--navy); font-weight: 700; text-align: start; padding: 10px 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .table td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .table tr:last-child td { border-bottom: 0; }
@@ -654,3 +664,20 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
 .keys-restart { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 12px 22px; background: var(--amber-soft); color: var(--amber); font-size: 13px; }
 .keys-restart[hidden] { display: none; }
 @media (max-width: 720px) { .kg-grid { grid-template-columns: 1fr; } }
+
+/* Narrow screens: each table row becomes a card, every value next to its column name (no sideways scrolling) */
+@media (max-width: 900px) {
+  .table thead { display: none; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; box-sizing: border-box; }
+  .table tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .table tr:last-child { border-bottom: 0; }
+  .table td { border-bottom: 0; padding: 4px 0; }
+  /* the column name sits in a fixed side column; the cell's content (pill, sub lines, buttons) flows next to it */
+  .table td[data-label] { position: relative; padding-inline-start: 34%; min-height: 22px; }
+  .table td[data-label]::before { content: attr(data-label); position: absolute; inset-inline-start: 0; top: 5px; width: 31%;
+       color: var(--muted); font-weight: 700; font-size: 12px; line-height: 1.5; }
+  .table tbody tr:hover td { background: none; }
+  .table td.empty { text-align: center; }
+  .table tr.sk-row td::before { content: none; }
+  .table tr.sk-row td { display: block; }
+}

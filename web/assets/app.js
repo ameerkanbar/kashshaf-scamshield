@@ -42,6 +42,33 @@
   const VCOLOR = { fraud: "#d03b3b", suspicious: "#ec835a", official: "#2a78d6", safe: "#0ca30c", unreachable: "#7d8794" };
   const pill = (v) => `<span class="pill v-${esc(v)}">${esc(t("v." + v))}</span>`;
   const src = (s) => esc(t("src." + s));
+  // Long text in a table cell: the first 5 words (or ~chars characters) and "…". The full text is in the tooltip,
+  // a click on it opens it in place, and the row's details show everything.
+  const clip = (text, { words = 5, chars = 44, cls = "" } = {}) => {
+    const full = String(text ?? "").replace(/\s+/g, " ").trim();
+    if (!full) return "";
+    let short = full.split(" ").slice(0, words).join(" ");
+    if (short.length > chars) short = short.slice(0, chars).trimEnd();
+    if (short === full) return `<span class="${cls}">${esc(full)}</span>`;
+    return `<span class="clip ${cls}" data-full="${esc(full)}" title="${esc(full)}" tabindex="0" role="button" aria-expanded="false">${esc(short)}…</span>`;
+  };
+  const clipUrl = (url, chars = 46) => clip(url, { words: 1, chars, cls: "url" }); // a link is one long "word"
+  const toggleClip = (el) => {
+    const open = el.getAttribute("aria-expanded") !== "true";
+    if (!el.dataset.short) el.dataset.short = el.textContent;
+    el.textContent = open ? el.dataset.full : el.dataset.short;
+    el.setAttribute("aria-expanded", String(open)); el.classList.toggle("open", open);
+  };
+  document.addEventListener("click", (e) => { const c = e.target.closest(".clip"); if (c) { e.stopPropagation(); toggleClip(c); } });
+  document.addEventListener("keydown", (e) => { const c = e.target.closest?.(".clip"); if (c && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleClip(c); } });
+  // On narrow screens a table row becomes a card: each cell carries its column name.
+  const labelTable = (tbody) => {
+    const heads = [...(tbody.closest("table")?.querySelectorAll("thead th") || [])].map((th) => th.textContent.trim());
+    if (!heads.length) return;
+    tbody.querySelectorAll("tr").forEach((tr) => [...tr.children].forEach((td, i) => { if (heads[i] && td.dataset.label !== heads[i]) td.dataset.label = heads[i]; }));
+  };
+  new MutationObserver((ms) => ms.forEach((m) => { const tb = m.target.closest?.("tbody") || (m.target.tagName === "TBODY" ? m.target : null); if (tb) labelTable(tb); }))
+    .observe(document.body, { childList: true, subtree: true });
   // What the agent saw in the screenshot, and how closely the page looks like the official site.
   const visualBox = (ai) => {
     if (!ai || (ai.visual_similarity == null && !ai.visual_notes_ar && !ai.visual_notes_en)) return "";
@@ -385,8 +412,8 @@
   const findingRow = (f) => `<tr data-domain="${esc(f.domain)}">
     <td>${pill(shownVerdict(f))}${shownVerdict(f) !== f.verdict ? `<div class="sub">${esc(t("rev.was", { v: t("v." + f.verdict) }))}</div>` : ""}<div class="sub num">${f.score}/100</div><div class="scorebar"><i style="width:${f.score}%"></i></div>${f.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}</td>
     <td>${time(f.created_at)}</td>
-    <td><span class="url">${esc(f.url)}</span><div class="sub">${esc(f.title || "")}</div></td>
-    <td>${esc(ent(f) || "—")}</td>
+    <td>${clipUrl(f.url)}<div class="sub">${clip(f.title)}</div></td>
+    <td>${clip(ent(f)) || "—"}</td>
     <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div>${f.reports ? `<div class="verified">👤 ${esc(t("rep.count", { n: f.reports }))}</div>` : ""}</td>
     <td>${f.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span><div class="sub">${t("rev.pendingSub")}</div>` : f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("rev.decided", { d: t("rev.d." + (f.override === "block" ? "block" : "allow")) })}</div>` : ""}</td>
     <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
@@ -420,9 +447,9 @@
   function renderBlocked() {
     const q = $("#blockedSearch").value.trim().toLowerCase();
     const rows = blockedRows.filter((b) => !q || b.domain.includes(q) || (b.entity_ar || "").includes(q) || (b.entity_en || "").toLowerCase().includes(q));
-    $("#blockedBody").innerHTML = rows.map((b) => `<tr><td>${time(b.blocked_at)}</td><td><span class="url">${esc(b.domain)}</span></td><td>${esc(ent(b) || "—")}</td>
+    $("#blockedBody").innerHTML = rows.map((b) => `<tr><td>${time(b.blocked_at)}</td><td>${clipUrl(b.domain, 34)}</td><td>${clip(ent(b)) || "—"}</td>
       <td class="num">${b.score}/100<div class="scorebar"><i style="width:${b.score}%"></i></div></td><td class="num">${b.links}</td><td class="num">${b.sightings}</td>
-      <td>${time(b.first_seen)}</td><td>${time(b.last_seen) || "—"}</td><td>${b.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span>${decisionButtons(b.domain, b.claimed_entity_id)}` : b.override === "block" ? `${t("manual")}<div class="sub">${esc(b.override_by || "")}</div>` : t("auto")}</td></tr>`).join("")
+      <td>${time(b.first_seen)}</td><td>${time(b.last_seen) || "—"}</td><td>${b.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span>${decisionButtons(b.domain, b.claimed_entity_id)}` : b.override === "block" ? `${t("manual")}<div class="sub">${clip(b.override_by, { words: 1, chars: 24 })}</div>` : t("auto")}</td></tr>`).join("")
       || `<tr><td colspan="9" class="empty">${t("blocked.none")}</td></tr>`;
   }
   $("#blockedSearch").addEventListener("input", renderBlocked);
@@ -461,8 +488,8 @@
   async function loadSearchLog() {
     const log = await api(`/api/searches?sort=${sort}`);
     $("#searchLogBody").innerHTML = log.map((x) => `<tr><td>${time(x.searched_at)}</td><td><span class="tag">${t(x.purpose === "agent" ? "kind.agent" : "kind.resident")}</span>${x.maps ? `<span class="tag">${t("maps")}</span>` : ""}</td>
-      <td dir="auto">${esc(x.query)}</td><td class="num">${x.purpose === "agent" ? "—" : x.new_links}</td><td class="num">${x.purpose === "agent" ? "—" : x.known_links}</td>
-      <td>${x.purpose === "agent" ? "—" : (x.blocked_now ?? x.known_blocked) ? `<span class="blocked">${x.blocked_now ?? x.known_blocked}</span>` : 0}</td><td>${esc(x.searched_by || "")}</td></tr>`).join("")
+      <td dir="auto">${clip(x.query)}</td><td class="num">${x.purpose === "agent" ? "—" : x.new_links}</td><td class="num">${x.purpose === "agent" ? "—" : x.known_links}</td>
+      <td>${x.purpose === "agent" ? "—" : (x.blocked_now ?? x.known_blocked) ? `<span class="blocked">${x.blocked_now ?? x.known_blocked}</span>` : 0}</td><td>${clip(x.searched_by, { words: 1, chars: 24 })}</td></tr>`).join("")
       || `<tr><td colspan="7" class="empty">${t("none")}</td></tr>`;
   }
   async function googleSearch(query, force) {
@@ -609,7 +636,7 @@
       renderSettings();
     }));
     const c = settingsCfg || {};
-    const val = (k, x) => typeof x === "boolean" ? t(x ? "yes" : "no") : k === "agent_base_url" ? (x ? `<span class="u">${esc(x)}</span>` : esc(t("direct"))) : x === null ? "—" : `<span class="${typeof x === "number" ? "num" : "u"}">${esc(x)}</span>`;
+    const val = (k, x) => typeof x === "boolean" ? t(x ? "yes" : "no") : k === "agent_base_url" ? (x ? `<span class="u">${esc(x)}</span>` : esc(t("direct"))) : x === null ? "—" : typeof x === "number" ? `<span class="num">${esc(x)}</span>` : clip(String(x), { words: 1, chars: 40, cls: "u" });
     const warn = (k, x) => (k === "allow_local_test_sites" && x) ? `<span class="tag red">${esc(t("cfg.warnTest"))}</span>` : (k === "agent_base_url" && x) ? `<span class="tag">${esc(t("cfg.warnProxy"))}</span>` : "";
     $("#configBody").innerHTML = Object.entries(c).map(([k, x]) => `<tr><td>${esc(t("cfg." + k))}</td><td>${val(k, x)} ${warn(k, x)}</td></tr>`).join("");
     paintIcons($("#settings") || document);
@@ -665,14 +692,14 @@
     const act = (a) => (a.status === "working" ? a.since : a.last_done) || 0, when = (a) => (a.status === "working" ? 1e12 : 0) + act(a);
     const list = [...st.agents].sort((a, b) => !act(a) - !act(b) || (sort === "risk" ? b.hits - a.hits || b.done - a.done : sort === "old" ? when(a) - when(b) : when(b) - when(a)) || a.id - b.id);
     $("#agentsBody").innerHTML = list.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(t("dept." + a.dept))}</td><td>${esc(t("role." + a.role))}</td><td>${!c.running || a.status === "paused" ? t("ag.paused") : a.status === "working" ? `<span class="tag" style="color:var(--blue)">${t("ag.working")}</span>` : t("ag.idle")}</td>
-      <td class="num">${a.done}</td><td>${a.hits ? `<span class="blocked">${a.hits}</span>` : 0}</td><td><span class="url">${esc(a.job || "")}</span></td><td>${time(a.since) || "—"}</td><td>${time(a.last_done) || "—"}</td></tr>`).join("");
+      <td class="num">${a.done}</td><td>${a.hits ? `<span class="blocked">${a.hits}</span>` : 0}</td><td>${clipUrl(a.job || "", 36)}</td><td>${time(a.since) || "—"}</td><td>${time(a.last_done) || "—"}</td></tr>`).join("");
     paintIcons($("#agKpis"));
   }
 
   // audit
   async function loadAudit() {
     const log = await api(`/api/audit?sort=${sort}`);
-    $("#auditBody").innerHTML = log.map((l) => `<tr><td>${time(l.at)}</td><td>${esc(l.actor)}</td><td>${esc(L[lang]["a." + l.action] ? t("a." + l.action) : l.action)}</td><td><span class="url">${esc(l.target || "")}</span></td></tr>`).join("")
+    $("#auditBody").innerHTML = log.map((l) => `<tr><td>${time(l.at)}</td><td>${clip(l.actor, { words: 1, chars: 26 })}</td><td>${esc(L[lang]["a." + l.action] ? t("a." + l.action) : l.action)}</td><td>${clipUrl(l.target || "", 46)}</td></tr>`).join("")
       || `<tr><td colspan="4" class="empty">${t("none")}</td></tr>`;
   }
 
