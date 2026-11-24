@@ -1,13 +1,50 @@
 # Kashshaf (كشّاف)
 
-A fraud-link radar for Abu Dhabi Police. A pool of agents (50 by default) takes
-links from Google results, ads, AI Overviews, Maps, certificate logs, phishing
-feeds and pasted messages. Each link is opened as a UAE phone and as a scanner,
-checked against the official registry, and investigated by a Claude agent with
-real tools. Fraud domains are blocked, and anyone who opens one sees an Abu
-Dhabi Police warning page. Suspicious domains are blocked at once too, as a
-precaution, until an analyst reviews them and decides: safe (unblock), official
-(add to the registry) or fraud (keep blocked).
+**ScamShield AI hackathon (42 Abu Dhabi × Abu Dhabi Police), team Return 0.**
+
+A fraud-link radar for Abu Dhabi Police. It finds scam links in Google results, ads, AI Overviews and
+Google Maps before people reach them, checks every one with a Claude agent against the official registry,
+blocks fraud and suspicious links until an analyst decides, and prepares the evidence for a takedown request.
+
+## The problem
+
+Scammers in the UAE copy Abu Dhabi Police, TAMM, UAE PASS, banks and telecoms: fake traffic-fine pages, fake
+refunds, fake parcel fees, fake customer-service numbers on Google Maps. Most tools wait for a person to paste
+a link they already doubt. By then the person may have entered their card or OTP. Scam sites also hide from
+scanners (they show a harmless page to bots and the scam to phones) and live only a few days.
+
+## Our solution
+
+Kashshaf searches like an Abu Dhabi resident on a phone, so it sees what residents see, and hunts the links
+itself:
+
+1. **Discover.** Resident searches on Google and Google Maps (via SerpAPI), new certificates for look-alike
+   domains (crt.sh), phishing feeds (OpenPhish), pasted messages, imported files and verified victim reports.
+2. **Check.** Each link is opened twice, as a UAE phone and as a scanner, to catch cloaking. Rules look for card,
+   OTP and Emirates ID forms, Telegram exfiltration and young domains. A Claude agent then investigates with
+   tools: it reads the page, looks at a screenshot next to the official site of the body it claims to be, looks
+   up the domain's registration and searches the web.
+3. **Decide.** A risk score with its reasons in Arabic and English. Fraud is blocked. Suspicious is blocked too,
+   until an analyst decides: safe, official (added to the registry) or fraud.
+4. **Act.** Anyone who opens a blocked link sees a police warning page and can file a verified report with UAE
+   PASS (simulated). The analyst downloads an evidence pack (screenshot, page copy, WHOIS/RDAP, hosting and abuse
+   contacts, SHA-256 hashes, a draft takedown request). Shared fingerprints link domains into gangs.
+
+## Technical choices, tools, APIs and data
+
+| Choice | Why |
+|---|---|
+| Python standard library server, no framework | Few moving parts for a 24-hour build; one dependency (`anthropic`) |
+| Supabase (Postgres, Auth, Storage) | Shared database for many agents and machines (`FOR UPDATE SKIP LOCKED` queue), row level security, private evidence bucket |
+| Claude (`claude-opus-5-5`) with tool use and vision | Reads Arabic and English pages, sees text drawn in images, compares a page with the official site, explains its verdict |
+| Rules before and beside the AI | Cheap, explainable signals; the rules alone never say "fraud" without a harmful signal, which keeps false positives on real banks and government sites low |
+| Human review for suspicious links | Blocks early without letting an uncertain verdict reach the public as final |
+| Headless Chrome | Screenshots as an iPhone sees them, for the agent and for the evidence |
+
+**APIs and data sources:** Anthropic Messages API, SerpAPI (Google, Google Maps), crt.sh, OpenPhish community
+feed, RDAP and WHOIS, Team Cymru IP-to-ASN, Supabase. The official registry (bodies, domains, phone numbers) is
+in `supabase/migrations/0003_seed_registry.sql` and `0013_official_phones.sql`, read from each body's own site.
+`test_sites/` serves local, clearly labelled TEST scam pages for the demo; no real scam is hosted.
 
 ## Architecture
 
@@ -142,8 +179,7 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
 
 ## Other material
 
-- `report/`: the analysis of the original repository (PDF and HTML).
-- `game-design/`: the HQ game design mockups (the game itself is at `/hq`).
+- `report/`: the analysis of the project (PDF and HTML).
 
 ## Settings (.env)
 
@@ -191,3 +227,22 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
 - The warning page uses a generic shield, not the official police crest (needs permission).
 - Secret keys entered in Settings are written to `.env` on the server and never sent back to the browser; the
   first-run setup page answers only on the computer running Kashshaf (loopback, Host and Origin checked).
+
+## Trade-offs, what we left out, what we would do differently
+
+- **UAE PASS is a simulation.** We have no client credentials, so a built-in, clearly labelled simulation with
+  fictional identities stands in for it. The flow is the real OpenID Connect one; switching is three settings.
+- **Cloaking is detected by device only.** The phone view differs from the scanner view by user agent. In
+  production the phone view should leave through a UAE mobile IP, since some scams check the IP too.
+- **Redirects.** The internal-address check runs on the first host only, not on every redirect hop, and
+  JavaScript redirects are not followed. Both need fixing before facing the open internet.
+- **WHOIS for `.ae`.** The `.ae` registry limits automated WHOIS, so registration data for `.ae` domains is often
+  missing.
+- **Cost and limits.** Every Claude investigation and every Google search costs money, so both have hourly caps
+  (`AI_MAX_PER_HOUR`, `SERP_MAX_PER_HOUR`); past the cap the rules judge alone and lean towards "suspicious".
+- **Registry not confirmed.** Official domains and numbers are marked unverified until each body confirms them.
+- **Left out:** automatic takedown submission (we draft the request, a person sends it), social media and SMS
+  sources, signing evidence with UAE PASS, TAMM integration.
+- **Differently:** start from a labelled evaluation set on day one to tune precision and recall, and keep one
+  shared test database per developer instead of one shared project.
+
