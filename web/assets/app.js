@@ -132,8 +132,8 @@
   let timers = [];
   function showLogin() { timers.forEach(clearInterval); timers = []; $("#app").hidden = true; $("#login").hidden = false; }
   function showApp() {
-    $("#login").hidden = true; $("#app").hidden = false;
-    const who = session.ksf ? `${(lang === "en" && session.user.name_en) || session.user.name || session.user.email} · UAE PASS` : session.user.email;
+    $("#login").hidden = true; $("#app").hidden = false; requestAnimationFrame(navEdges);
+    const who =session.ksf ? `${(lang === "en" && session.user.name_en) || session.user.name || session.user.email} · UAE PASS` : session.user.email;
     $("#userEmail").textContent = who; $("#avatar").textContent = (who || "?")[0];
     route(); refreshState(); timers.forEach(clearInterval);
     let tick = 0; // the live view refreshes every 1.5 s, the other pages every 3 s
@@ -147,6 +147,15 @@
     session = data.session; $("#password").value = ""; showApp();
   });
   $("#logout").onclick = async () => { dropKsf(); await sb.auth.signOut(); session = null; showLogin(); }; // end both kinds of session
+
+  /* ---------------- side menu: fade the edge that has more items to scroll to ---------------- */
+  const navEdges = () => {
+    const n = $("#nav"); if (!n) return;
+    n.classList.toggle("more-up", n.scrollTop > 2);
+    n.classList.toggle("more-down", n.scrollTop + n.clientHeight < n.scrollHeight - 2);
+  };
+  $("#nav").addEventListener("scroll", navEdges, { passive: true });
+  new ResizeObserver(navEdges).observe($("#nav")); // also when the menu opens on a phone or the window changes
 
   /* ---------------- routing ---------------- */
   const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "review", "blocked", "gangs", "discover", "agents", "audit"];
