@@ -255,8 +255,14 @@ html[dir="rtl"] .feed li.new { animation-name: slide-rtl; }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
 .table td { overflow-wrap: anywhere; }
 .table th { white-space: normal; }
-.table .ts { white-space: normal; display: inline-block; min-width: 9ch; } /* date over time, not one wide line */
-.table .decide .btn { white-space: normal; text-align: center; }
+.table .ts { white-space: normal; display: inline-block; min-width: 10.5ch; font-size: 12px; } /* date over time, not one wide line */
+/* decision buttons in a table: small, one line each, same width, stacked */
+.table .decide { min-width: 128px; gap: 5px; }
+.table .decide .btn { width: 100%; justify-content: center; text-align: center; white-space: nowrap;
+       font-size: 11px; line-height: 1.4; padding: 5px 8px; min-height: 0; border-radius: 8px; box-shadow: none; }
+.table td .pending { white-space: nowrap; font-size: 12.5px; }
+/* blocked sites: the domain keeps room to read on one or two lines */
+@container tblwide (min-width: 901px) { #blockedBody td:nth-child(2) { min-width: 130px; } #blockedBody td, [data-view="blocked"] .table th { padding-inline: 8px; } }
 .table td .url, .table td .u { word-break: normal; overflow-wrap: anywhere; }
 .clip { cursor: pointer; border-bottom: 1px dotted #98a2b3; }
 .clip:hover { color: var(--blue); border-bottom-color: var(--blue); }
@@ -665,8 +671,11 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
 .keys-restart[hidden] { display: none; }
 @media (max-width: 720px) { .kg-grid { grid-template-columns: 1fr; } }
 
-/* Narrow screens: each table row becomes a card, every value next to its column name (no sideways scrolling) */
-@media (max-width: 900px) {
+/* A table turns into cards when its own box is too narrow for its columns (whatever the window or the side menu):
+   each row a card, every value next to its column name. No sideways scrolling anywhere. */
+.table-wrap { container: tbl / inline-size; }
+.table-wrap.wide { container: tblwide / inline-size; }
+@container tbl (max-width: 700px) {
   .table thead { display: none; }
   .table, .table tbody, .table tr, .table td { display: block; width: 100%; box-sizing: border-box; }
   .table tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
@@ -680,4 +689,21 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
   .table td.empty { text-align: center; }
   .table tr.sk-row td::before { content: none; }
   .table tr.sk-row td { display: block; }
+  .table .decide { max-width: 220px; }
+}
+@container tblwide (max-width: 900px) {
+  .table thead { display: none; }
+  .table, .table tbody, .table tr, .table td { display: block; width: 100%; box-sizing: border-box; }
+  .table tr { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  .table tr:last-child { border-bottom: 0; }
+  .table td { border-bottom: 0; padding: 4px 0; }
+  /* the column name sits in a fixed side column; the cell's content (pill, sub lines, buttons) flows next to it */
+  .table td[data-label] { position: relative; padding-inline-start: 34%; min-height: 22px; }
+  .table td[data-label]::before { content: attr(data-label); position: absolute; inset-inline-start: 0; top: 5px; width: 31%;
+       color: var(--muted); font-weight: 700; font-size: 12px; line-height: 1.5; }
+  .table tbody tr:hover td { background: none; }
+  .table td.empty { text-align: center; }
+  .table tr.sk-row td::before { content: none; }
+  .table tr.sk-row td { display: block; }
+  .table .decide { max-width: 220px; }
 }
