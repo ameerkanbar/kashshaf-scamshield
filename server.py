@@ -6,6 +6,7 @@ import argparse
 import base64
 import json
 import mimetypes
+import os
 import re
 import threading
 import time
@@ -15,8 +16,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from kashshaf import config  # loads .env first
-from kashshaf import agent, control, discovery, evidence, importer, pipeline, store, supa
+from kashshaf import agent, control, discovery, evidence, importer, pipeline, store, supa, uaepass
 from kashshaf.workers import Pool
+
+# What a victim can tell us in a verified report (the page shows the Arabic labels)
+REPORT_WHAT = ("card", "otp", "id", "password", "paid", "nothing")
+REPORT_CHANNELS = ("sms", "whatsapp", "email", "search", "ad", "social", "other")
 
 WEB = Path(__file__).resolve().parent / "web"
 URL_RE = re.compile(r"https?://[^\s<>\"'،]+", re.IGNORECASE)
@@ -83,7 +88,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def user(self) -> dict | None:
         token = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+        if token.startswith("ksf1."):  # an analyst who logged in with UAE PASS
+            return uaepass.session_user(token)
         return supa.user_from_token(token)
+
+    def origin(self) -> str:
+        """This server's address as the browser sees it (PUBLIC_URL pins it on a real deployment)."""
+        return os.environ.get("PUBLIC_URL", "").rstrip("/") or f"http://{self.headers.get('Host', 'localhost:8080')}"
+
+    def redirect(self, location: str):
+        return self._send(302, b"", "text/plain", {"Location": location})
 
     def log_message(self, *args):
         pass
@@ -127,8 +141,43 @@ class Handler(BaseHTTPRequestHandler):
             return self.static("room.html")
         if path == "/blocked":
             return self.static("blocked.html")
-        if path.startswith("/assets/") or path == "/blocked.js":
+        if path == "/report":
+            return self.static("report.html")
+        if path.startswith("/assets/") or path in ("/blocked.js", "/report.js"):
             return self.static(path.lstrip("/"))
+
+        # UAE PASS: Kashshaf's sign-in (analysts) and verified reports (victims) ...
+        if path == "/auth/uaepass/start":
+            return self.redirect(uaepass.authorize_url(self.origin(), "login"))
+        if path == "/report/start":
+            url = q.get("url", "")
+            if not url.startswith(("http://", "https://")):
+                return self.json({"error": "url must start with http:// or https://"}, 400)
+            return self.redirect(uaepass.authorize_url(self.origin(), "report", {"url": url}))
+        if path == "/auth/uaepass/callback":
+            return self.uaepass_callback(q)
+        if path == "/api/report_ticket":
+            rec = uaepass.ticket(q.get("ticket", ""))
+            if not rec:
+                return self.json({"error": "انتهت صلاحية التحقق. ابدأ البلاغ من جديد عبر UAE PASS."}, 410)
+            who = rec["identity"]
+            return self.json({"name_ar": who.get("fullnameAR"), "name_en": who.get("fullnameEN"),
+                              "level": who.get("userType"), "level_ar": uaepass.LEVEL_AR.get(who.get("userType")),
+                              "idn": uaepass.masked_idn(who.get("idn")), "url": rec["url"]})
+        # ... and the simulation that stands in for UAE PASS until the police have real client credentials
+        if uaepass.MOCK and path == "/mock-uaepass/authorize":
+            if q.get("client_id") != uaepass.CLIENT_ID or \
+                    not q.get("redirect_uri", "").startswith(self.origin() + "/auth/uaepass/callback"):
+                return self.json({"error": "unknown client or redirect_uri"}, 400)
+            return self._send(200, uaepass.mock_page(q).encode(), "text/html; charset=utf-8")
+        if uaepass.MOCK and path == "/mock-uaepass/approve":
+            code = uaepass.mock_issue_code(q.get("sub", ""), q.get("client_id", ""), q.get("redirect_uri", ""))
+            if not code:
+                return self.json({"error": "invalid request"}, 400)
+            return self.redirect(f"{q['redirect_uri']}?code={code}&state={quote(q.get('state', ''), safe='')}")
+        if uaepass.MOCK and path == "/mock-uaepass/userinfo":
+            info = uaepass.mock_userinfo(self.headers.get("Authorization") or "")
+            return self.json(info) if info else self.json({"error": "invalid_token"}, 401)
         if path == "/api/config":
             return self.json({"supabase_url": config.SUPABASE_URL, "supabase_key": config.SUPABASE_PUBLISHABLE_KEY})
         if path == "/api/blocklist":
@@ -161,6 +210,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/scan_result":
             ids = [int(x) for x in q.get("ids", "").split(",") if x.strip().isdigit()][:50]
             return self.json(store.scan_result(ids))
+        if path == "/api/reports":
+            return self.json(store.citizen_reports(q.get("domain", "").lower()))
         if path == "/api/import_result":
             return self.json(store.import_result(int(q["id"])))
         # Evidence for police use and takedown requests
@@ -204,6 +255,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def route_post(self):
         path = urlsplit(self.path).path
+        if uaepass.MOCK and path == "/mock-uaepass/token":
+            n = int(self.headers.get("Content-Length") or 0)
+            form = {k: v[0] for k, v in parse_qs(self.rfile.read(n).decode()).items()}
+            token = uaepass.mock_token(form.get("code", ""), form.get("redirect_uri", ""),
+                                       self.headers.get("Authorization") or "")
+            return self.json(token) if token else self.json({"error": "invalid_grant"}, 400)
+        if path == "/api/report":  # a victim's report, from a UAE PASS-verified identity (no analyst login)
+            return self.file_report(self.body())
         user = self.user()
         if not user:
             return self.json({"error": "login required"}, 401)
@@ -311,6 +370,53 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"queued": row["url"]})
         return self.json({"error": "not found"}, 404)
 
+    def uaepass_callback(self, q: dict):
+        """UAE PASS sends the person back here with a code (or an error)."""
+        if q.get("error"):  # cancelled in UAE PASS
+            rec = uaepass.drop_state(q.get("state", "")) or {"purpose": "login", "extra": {}}
+            if rec["purpose"] == "report":
+                return self.redirect("/report#error=cancelled&url=" + quote(rec["extra"].get("url", ""), safe=""))
+            return self.redirect("/#login_error=cancelled")
+        try:
+            rec, identity = uaepass.finish(self.origin(), q.get("code", ""), q.get("state", ""))
+        except Exception as e:
+            print(f"[uaepass] sign-in failed: {e}")
+            return self.redirect("/#login_error=failed")
+        who = identity.get("email") or identity.get("sub")
+        if rec["purpose"] == "login":
+            refusal = uaepass.analyst_refusal(identity)
+            if refusal:
+                store.audit(f"uaepass:{who}", "login_denied", None, {"level": identity.get("userType"), "reason": refusal})
+                return self.redirect("/#login_error=" + quote(refusal, safe=""))
+            store.audit(who, "login_uaepass", None, {"level": identity.get("userType")})
+            return self.redirect("/#session=" + uaepass.issue_session(identity))
+        url = rec["extra"].get("url", "")
+        if identity.get("userType") not in ("SOP2", "SOP3"):  # a report needs a verified identity
+            return self.redirect("/report#error=unverified&url=" + quote(url, safe=""))
+        return self.redirect("/report#ticket=" + uaepass.issue_ticket(identity, url))
+
+    def file_report(self, data: dict):
+        rec = uaepass.ticket(data.get("ticket", ""), use=True)
+        if not rec:
+            return self.json({"error": "انتهت صلاحية التحقق. ابدأ البلاغ من جديد عبر UAE PASS."}, 410)
+        who, url = rec["identity"], rec["url"]
+        what = [w for w in data.get("what") or [] if w in REPORT_WHAT]
+        try:
+            amount = round(float(data["amount"]), 2) if data.get("amount") not in (None, "") else None
+        except (TypeError, ValueError):
+            amount = None
+        if amount is not None and not 0 <= amount < 1e9:
+            amount = None
+        channel = data.get("channel") if data.get("channel") in REPORT_CHANNELS else None
+        row = store.queue_url(url, "citizen_report", priority=10)
+        if not row["_new"] and not store.recently_checked(row, config.RECHECK_AFTER_HOURS):
+            store.requeue_url(row, priority=10)
+        report = store.add_citizen_report(row, url, who, what, amount, channel,
+                                          (data.get("notes") or "").strip()[:2000], bool(data.get("contact_ok")))
+        pool.notify()
+        store.audit(f"uaepass:{who.get('sub')}", "citizen_report", url, {"report_id": report["id"], "what": what})
+        return self.json({"ref": f"KSF-R-{report['id']}"})
+
     def check(self, url: str, inspect_unknown: bool = False) -> dict:
         domain = store.host_of(url)
         row = store.domain_status(domain)
@@ -358,6 +464,7 @@ def main():
     print(f"Kashshaf on http://localhost:{args.port} | {args.agents} agents | "
           f"Claude agent {'ON (' + agent.MODEL + ')' if agent.enabled() else 'OFF'} | "
           f"Google {'ON' if config.SERPAPI_KEY else 'OFF'}")
+    uaepass.configure(args.port)  # the simulated UAE PASS is served by this same server
     ThreadingHTTPServer((args.host, args.port), Handler).serve_forever()
 
 

@@ -14,7 +14,10 @@
 
   const cfg = await fetch("/api/config").then((r) => r.json());
   const sb = supabase.createClient(cfg.supabase_url, cfg.supabase_key);
-  const session = (await sb.auth.getSession()).data.session;
+  // an analyst who logged in with UAE PASS has a Kashshaf session; otherwise the Supabase one
+  let ksf = null;
+  try { ksf = localStorage.getItem("kashshaf.session"); } catch { /* storage off */ }
+  const session = ksf ? { access_token: ksf } : (await sb.auth.getSession()).data.session;
   if (!session) { location.href = "/"; return; }
 
   async function api(path, body) {

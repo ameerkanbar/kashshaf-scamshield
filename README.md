@@ -17,7 +17,7 @@ precaution, until an analyst reviews them and decides: safe (unblock), official
 | Discovery | SerpAPI (Google, ads, AI Overviews, Maps), crt.sh, OpenPhish | `kashshaf/discovery.py` |
 | Agent pool | N workers claim URLs with `claim_url()` (`FOR UPDATE SKIP LOCKED`), safe across machines | `kashshaf/workers.py` |
 | Rules | Two-view fetch, cloaking, registry match, payment/OTP asks, Telegram exfil, domain age | `kashshaf/rules.py` |
-| Claude agent | Tools: `fetch_page`, `lookup_official_entity`, `domain_registration`, `web_search`, `submit_verdict` | `kashshaf/agent.py` |
+| Claude agent | Tools: `fetch_page`, `view_page` (screenshot of the page beside the official site, so it reads text hidden in images and rates the visual similarity), `lookup_official_entity`, `domain_registration`, `web_search`, `submit_verdict`. When the AI service is busy, the rules give a provisional verdict and the link is checked again after 5, 15 and 30 minutes | `kashshaf/agent.py` |
 | Server | Analyst dashboard (Supabase login), API, safe-link gateway, warning page | `server.py`, `web/` |
 | Extension | Redirects blocked domains to the warning page | `extension/` |
 | Evidence | Screenshot, page copy, WHOIS/RDAP, hosting, SHA-256 hashes; evidence pack and takedown draft | `kashshaf/evidence.py` |
@@ -59,6 +59,21 @@ In a link's details, the analyst downloads the evidence pack (ZIP: printable rep
 as text, evidence.json, a draft takedown request and SHA256SUMS.txt) or opens the report to print as PDF.
 The blocked-sites CSV carries the registrar, hosting and abuse contacts for bulk takedown requests.
 
+## UAE PASS (the UAE digital identity)
+
+- **Analysts log in with UAE PASS.** Only a fully verified identity (SOP3) whose email is a police address
+  (`ANALYST_EMAIL_DOMAINS`, default `adpolice.gov.ae`) or listed in `ANALYST_EMAILS` gets in. Every decision is
+  then recorded under that officer's verified identity. Email and password stay as a fallback.
+- **Victims report with UAE PASS.** The warning page offers a verified report: after UAE PASS (SOP2 or SOP3) the
+  person says what they entered or paid and how the link reached them. The report reaches the analyst with the
+  link and its evidence, and the link is checked again at once. Only what a case needs is kept; phone and email
+  only with the person's consent; the Emirates ID number is masked on screen.
+- **Simulation now, the real thing later.** Kashshaf follows the real UAE PASS OpenID Connect flow
+  (authorize, code, token, userinfo; the same verification levels and identity fields). Until the police have
+  client credentials, a built-in simulation with fictional identities stands in for UAE PASS at `/mock-uaepass`.
+  Set `UAEPASS_BASE_URL`, `UAEPASS_CLIENT_ID` and `UAEPASS_CLIENT_SECRET` to switch to UAE PASS staging or
+  production, with no code change.
+
 ## Importing a file of links
 
 On the «فحص رسالة أو رابط» page, drop a CSV, Excel (.xlsx), TXT or JSON file (up to 5000 links).
@@ -86,6 +101,11 @@ For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claud
 | `ALLOW_LOCAL_TEST_SITES` | true | Allow `*.localhost` test pages. Set to false in production |
 | `EVIDENCE_AUTO` | true | Capture evidence automatically for fraud and suspicious links (at most 2 at a time, once per link every 6 hours) |
 | `CHROME_PATH` | auto | Chrome or Chromium used for screenshots; found automatically on macOS and Linux |
+| `UAEPASS_BASE_URL` | empty | Empty = the built-in simulation. UAE PASS staging: `https://stg-id.uaepass.ae/idshub` |
+| `UAEPASS_CLIENT_ID`, `UAEPASS_CLIENT_SECRET` | simulation values | The client credentials UAE PASS issues to the police |
+| `ANALYST_EMAIL_DOMAINS` | adpolice.gov.ae | Email domains allowed to log in as analysts with UAE PASS |
+| `ANALYST_EMAILS` | empty | Extra addresses allowed to log in as analysts |
+| `PUBLIC_URL` | empty | The address people use to reach Kashshaf; pins the UAE PASS return address on a real deployment |
 
 ## Public endpoints (no login)
 
@@ -95,6 +115,8 @@ For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claud
 | `GET /api/check?url=` | Lookup for banks, telecoms and apps |
 | `GET /go?url=` | Safe-link gateway: opens the site or the warning page |
 | `GET /blocked?url=` | Warning page |
+| `GET /auth/uaepass/start` | Analyst login with UAE PASS |
+| `GET /report/start?url=` | A victim's verified report, starting with UAE PASS |
 
 ## Security notes
 

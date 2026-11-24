@@ -4,8 +4,16 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const VERDICT = { fraud: "احتيال", suspicious: "مشبوه", safe: "آمن", official: "رسمي", unreachable: "تعذّر الفتح" };
   const SOURCE = { message: "رسالة", serp_organic: "نتائج جوجل", serp_ad: "إعلان جوجل", serp_ai_overview: "ملخص الذكاء الاصطناعي",
-    maps: "الخرائط", ct_log: "سجل الشهادات", phish_feed: "قائمة تصيّد", analyst: "محلل", gateway: "رابط محمي", seed: "تجربة", import: "استيراد ملف" };
+    maps: "الخرائط", ct_log: "سجل الشهادات", phish_feed: "قائمة تصيّد", analyst: "محلل", gateway: "رابط محمي", seed: "تجربة", import: "استيراد ملف", citizen_report: "بلاغ مواطن" };
   const pill = (v) => `<span class="pill v-${esc(v)}">${VERDICT[v] || esc(v)}</span>`;
+  // What the agent saw in the screenshot, and how closely the page looks like the official site.
+  const visualBox = (ai) => {
+    if (!ai || (ai.visual_similarity == null && !ai.visual_notes_ar)) return "";
+    const n = ai.visual_similarity;
+    return `<div class="visual-box"><b>ما رآه الوكيل في لقطة الشاشة:</b> ${esc(ai.visual_notes_ar || "")}
+      ${n != null ? `<div class="sim"><span>الشبه بالموقع الرسمي</span><span class="sim-bar"><i style="width:${Number(n)}%"></i></span><b>${Number(n)}%</b></div>` : ""}
+      ${ai.visual_notes_en ? `<span class="muted" dir="ltr" style="display:block">${esc(ai.visual_notes_en)}</span>` : ""}</div>`;
+  };
   // Date and time everywhere, e.g. 23/11/2026 · 3:24:56 م. Accepts ISO strings or Unix seconds.
   const time = (t) => {
     if (!t) return "";
@@ -19,7 +27,27 @@
 
   const cfg = await fetch("/api/config").then((r) => r.json());
   const sb = supabase.createClient(cfg.supabase_url, cfg.supabase_key);
-  let session = (await sb.auth.getSession()).data.session;
+
+  // UAE PASS sign-in comes back as #session=… or #login_error=…: keep the session, then clean the address bar.
+  const KSF_KEY = "kashshaf.session";
+  const back = new URLSearchParams(location.hash.slice(1));
+  const loginError = back.get("login_error");
+  if (back.get("session")) { try { localStorage.setItem(KSF_KEY, back.get("session")); } catch { /* storage off */ } }
+  if (back.has("session") || back.has("login_error")) history.replaceState(null, "", location.pathname);
+  function ksfSession() {
+    let token = null;
+    try { token = localStorage.getItem(KSF_KEY); } catch { return null; }
+    if (!token) return null;
+    try {
+      const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const bytes = Uint8Array.from(atob(b64 + "=".repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0));
+      const p = JSON.parse(new TextDecoder().decode(bytes));
+      if (p.exp * 1000 < Date.now()) return null;
+      return { access_token: token, ksf: true, user: { email: p.email, name: p.name_ar } };
+    } catch { return null; }
+  }
+  function dropKsf() { try { localStorage.removeItem(KSF_KEY); } catch { /* storage off */ } }
+  let session = ksfSession() || (await sb.auth.getSession()).data.session;
   let tab = "overview", timer = null;
 
   // One sort for every list on every page, remembered in this browser (the operations room reads it too).
@@ -34,7 +62,7 @@
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401) { showLogin(); throw new Error("login required"); }
+    if (res.status === 401) { if (session?.ksf) { dropKsf(); session = null; } showLogin(); throw new Error("login required"); }
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -42,7 +70,7 @@
 
   // ---- auth --------------------------------------------------------------
   function showLogin() { $("#app").hidden = true; $("#login").hidden = false; clearInterval(timer); }
-  function showApp() { $("#login").hidden = true; $("#app").hidden = false; $("#userEmail").textContent = session.user.email; refresh(); timer = setInterval(refresh, 3000); window.KashshafTour?.maybeStart(); }
+  function showApp() { $("#login").hidden = true; $("#app").hidden = false; $("#userEmail").textContent = session.ksf ? `${session.user.name} · UAE PASS` : session.user.email; refresh(); timer = setInterval(refresh, 3000); window.KashshafTour?.maybeStart(); }
   $("#loginForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("#loginError").textContent = "";
@@ -50,8 +78,12 @@
     if (error) { $("#loginError").textContent = "بيانات الدخول غير صحيحة"; return; }
     session = data.session; showApp();
   });
-  $("#logout").onclick = async () => { await sb.auth.signOut(); session = null; showLogin(); };
-  sb.auth.onAuthStateChange((_e, s) => { session = s; });
+  $("#logout").onclick = async () => {
+    dropKsf();  // end both kinds of session, so a reload does not log back in with the other one
+    await sb.auth.signOut();
+    session = null; showLogin();
+  };
+  sb.auth.onAuthStateChange((_e, s) => { if (!session?.ksf) session = s; });  // a UAE PASS session is ours, not Supabase's
 
   // ---- tabs --------------------------------------------------------------
   $("#nav").addEventListener("click", (e) => {
@@ -77,6 +109,7 @@
           <span><span class="muted">الجهة المنتحَلة:</span> ${esc(f.entity_ar || "—")}</span>
           <span><span class="muted">المصدر:</span> ${sources || "—"} <span class="muted">· ${f.sightings} ظهور</span></span>
           <span>${time(f.created_at)}</span>
+          ${f.reports ? `<span class="verified">👤 ${f.reports} بلاغ موثّق</span>` : ""}
         </div>
       </div>
       <div class="result-side">
@@ -131,7 +164,7 @@
       $("#reviewCount").hidden = !s.review;
       $("#reviewCount").textContent = s.review;
       if (t === "overview") {
-        $("#kpis").innerHTML = [["روابط مفحوصة", s.urls], ["في الانتظار", s.queued + s.checking], ["مواقع محظورة", s.blocked, "danger"], ["بانتظار المراجعة", s.review, "warn"],
+        $("#kpis").innerHTML = [["روابط مفحوصة", s.urls], ["في الانتظار", s.queued + s.checking], ["مواقع محظورة", s.blocked, "danger"], ["بانتظار المراجعة", s.review, "warn"], ["بلاغات موثّقة", s.reports, "danger"],
           ["احتيال", s.fraud, "danger"], ["مشبوه", s.suspicious], ["مواقع تخفي نفسها", s.cloaked], ["مواقع رسمية", s.official], ["رسائل", s.messages]]
           .map(([k, v, c]) => `<div class="kpi ${c || ""}"><b>${v}</b><span>${k}</span></div>`).join("");
       }
@@ -315,6 +348,7 @@
           <span class="url">${esc(x.url)}</span>
           <p class="muted">${entity(v)}وقت الحكم ${time(v.created_at)}${by(v) ? ` · بواسطة ${by(v)}` : ""}</p>
           ${v.ai?.summary_ar ? `<div class="ai-box"><b>تحليل الوكيل:</b> ${esc(v.ai.summary_ar)}</div>` : ""}
+          ${visualBox(v.ai)}
           ${(v.reasons || []).length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(r.ar)}</li>`).join("")}</ul>` : ""}
           <div class="row-actions"><button class="btn btn-sm" data-open="${x.url_id}">التفاصيل والأدلة</button>
             ${v.blocked ? `<a class="btn btn-sm" href="/blocked?url=${encodeURIComponent(x.url)}" target="_blank" rel="noopener">صفحة التحذير</a>` : ""}</div>
@@ -527,7 +561,8 @@
         <p class="muted">الدرجة ${v.score}/100 · ${esc(v.model || "")} · وقت الحكم ${time(v.created_at)} · ${esc(s.agent || "")}
           · أول ظهور للرابط ${time(d.url.first_seen)}
           ${s.domain_created ? ` · تاريخ تسجيل النطاق ${esc(s.domain_created)}` : ""}</p>
-        ${v.ai ? `<div class="ai-box"><b>تحليل الوكيل:</b> ${esc(v.ai.summary_ar)}<span class="muted" dir="ltr" style="display:block">${esc(v.ai.summary_en)}</span></div>` : ""}
+        ${v.ai?.summary_ar ? `<div class="ai-box"><b>تحليل الوكيل:</b> ${esc(v.ai.summary_ar)}<span class="muted" dir="ltr" style="display:block">${esc(v.ai.summary_en)}</span></div>` : ""}
+        ${visualBox(v.ai)}
         <h3>الأسباب</h3>
         <ul class="reasons">${(v.reasons || []).map((r) => `<li>${esc(r.ar)}<span class="en">${esc(r.en)}${r.points ? ` (+${r.points})` : ""}</span></li>`).join("")}</ul>
         <h3>ما يراه الهاتف مقابل ما تراه أداة الفحص ${s.cloaked ? '<span class="pill v-fraud">إخفاء</span>' : ""}</h3>
@@ -539,6 +574,8 @@
         <div>${d.fingerprints.map((f) => `<span class="tag">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || '<span class="muted">لا يوجد</span>'}</div>
         <h3>أين ظهر</h3>
         <div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${SOURCE[x.source] || esc(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · الترتيب ${x.position}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
+        <h3>بلاغات الضحايا الموثّقة (UAE PASS)</h3>
+        <div id="reportsBox"><p class="muted">جارٍ التحميل…</p></div>
         <h3>الأدلة للشرطة وطلب الإزالة</h3>
         <div id="evidenceBox" class="evidence"><p class="muted">جارٍ تحميل الأدلة…</p></div>
         <div class="row-actions">
@@ -562,6 +599,35 @@
     }));
     $("#detail").showModal();
     loadEvidence(d.url.id);
+    loadReports(domain);
+  }
+
+  // ---- verified victim reports (UAE PASS) -------------------------------------------------------
+  const WHAT_AR = { card: "أدخل بيانات البطاقة", otp: "أدخل رمز التحقق", id: "أدخل الهوية أو بيانات شخصية",
+    password: "أدخل كلمة مرور", paid: "دفع مبلغاً", nothing: "لم يُدخل شيئاً" };
+  const CHANNEL_AR = { sms: "رسالة نصية", whatsapp: "واتساب", email: "بريد", search: "نتائج البحث", ad: "إعلان",
+    social: "وسائل التواصل", other: "غير ذلك" };
+  async function loadReports(domain) {
+    const box = $("#reportsBox");
+    if (!box) return;
+    let rows;
+    try {
+      rows = await api(`/api/reports?domain=${encodeURIComponent(domain)}`);
+    } catch (err) {
+      box.innerHTML = `<p class="error">${esc(err.message)}</p>`;
+      return;
+    }
+    if ($("#reportsBox") !== box) return;  // another link was opened meanwhile
+    box.innerHTML = rows.length ? `<div class="reports-list">${rows.map((r) => `<div class="report-item">
+        <b>${esc(r.reporter_name_ar || "")}</b> <span class="verified">✓ ${esc(r.reporter_level)}</span>
+        <span class="muted small" dir="ltr">${esc(r.reporter_idn)}</span>
+        <div>${(r.what_happened || []).map((w) => `<span class="tag">${WHAT_AR[w] || esc(w)}</span>`).join("")}
+          ${r.amount_aed != null ? ` <b>${esc(r.amount_aed)} درهم</b>` : ""}</div>
+        <div class="meta"><span>${time(r.created_at)}</span>
+          ${r.channel ? `<span>وصله عبر: ${CHANNEL_AR[r.channel] || esc(r.channel)}</span>` : ""}
+          ${r.contact_ok ? `<span>يقبل التواصل: <span dir="ltr">${esc(r.reporter_mobile || "")}</span></span>` : "<span>لا يقبل التواصل</span>"}</div>
+        ${r.notes ? `<p class="muted">${esc(r.notes)}</p>` : ""}</div>`).join("")}</div>`
+      : '<p class="muted">لا توجد بلاغات موثّقة عن هذا الموقع.</p>';
   }
 
   // ---- evidence: screenshot, WHOIS, hosting, hashes; the pack and the printable report ------------
@@ -678,4 +744,8 @@
 
   $("#tourBtn").addEventListener("click", () => window.KashshafTour?.start());
   session ? showApp() : showLogin();
+  if (loginError) {
+    $("#loginError").textContent = loginError === "cancelled" ? "أُلغي الدخول عبر UAE PASS."
+      : loginError === "failed" ? "تعذّر الدخول عبر UAE PASS. حاول مرة أخرى." : loginError;
+  }
 })();

@@ -42,7 +42,7 @@ SECOND_LEVEL = {"co", "com", "net", "org", "gov", "ac", "sch", "mil", "edu"}
 SOURCE_AR = {"message": "رسالة", "serp_organic": "نتائج جوجل", "serp_ad": "إعلان جوجل",
              "serp_ai_overview": "ملخص الذكاء الاصطناعي", "maps": "الخرائط", "ct_log": "سجل الشهادات",
              "phish_feed": "قائمة تصيّد", "analyst": "محلل", "gateway": "رابط محمي", "seed": "تجربة",
-             "import": "استيراد ملف"}
+             "import": "استيراد ملف", "citizen_report": "بلاغ مواطن"}
 
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="evidence")  # at most two Chrome screenshots at once
 _busy: set[int] = set()
@@ -214,22 +214,38 @@ def hosting(host: str) -> dict:
     return rec
 
 
-def screenshot(url: str) -> tuple[bytes | None, str | None]:
-    """A PNG of the page as an iPhone in the UAE sees it: headless Chrome with a throwaway profile."""
+_chrome_slots = threading.BoundedSemaphore(3)  # Chrome is heavy: at most three running at once in this process
+_refs: dict[str, bytes] = {}  # screenshots of official sites, by domain
+
+
+def can_open(url: str) -> bool:
+    """The fetcher's rule: internal addresses are never opened (local TEST pages only when allowed)."""
+    host = urlsplit(url).hostname or ""
+    if host.endswith(".localhost"):
+        return fetcher.ALLOW_TEST_SITES
+    return bool(host) and fetcher._public_host(host)
+
+
+def screenshot(url: str, scale: int = 2) -> tuple[bytes | None, str | None]:
+    """A PNG of the page as an iPhone in the UAE sees it: headless Chrome with a throwaway profile.
+    scale 2 for evidence (sharp), 1 for the agent to look at (a quarter of the image tokens)."""
     exe = chrome()
     if not exe:
         return None, "Chrome was not found (set CHROME_PATH)"
+    if not can_open(url):
+        return None, "internal address: not opened"
     tmp = tempfile.mkdtemp(prefix="kashshaf-shot-")
     out = os.path.join(tmp, "shot.png")
     try:
-        run = subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio", "--no-first-run",
-                              "--no-default-browser-check", "--disable-extensions", "--disable-default-apps",
-                              "--disable-sync", "--disable-background-networking",
-                              # desktop Chrome keeps windows at least ~500px wide; narrower crops the page
-                              f"--user-data-dir={os.path.join(tmp, 'profile')}", "--window-size=500,1000",
-                              "--force-device-scale-factor=2", f"--user-agent={fetcher.PHONE_UA}", "--lang=ar-AE",
-                              "--accept-lang=ar-AE,en-AE", "--virtual-time-budget=5000", f"--screenshot={out}", url],
-                             capture_output=True, text=True, timeout=45)
+        with _chrome_slots:
+            run = subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--mute-audio",
+                                  "--no-first-run", "--no-default-browser-check", "--disable-extensions",
+                                  "--disable-default-apps", "--disable-sync", "--disable-background-networking",
+                                  # desktop Chrome keeps windows at least ~500px wide; narrower crops the page
+                                  f"--user-data-dir={os.path.join(tmp, 'profile')}", "--window-size=500,1000",
+                                  f"--force-device-scale-factor={scale}", f"--user-agent={fetcher.PHONE_UA + (' KashshafScan' if '.localhost' in url.split('/')[2] else '')}",
+                                  "--lang=ar-AE", "--accept-lang=ar-AE,en-AE", "--virtual-time-budget=5000",
+                                  f"--screenshot={out}", url], capture_output=True, text=True, timeout=45)
         if os.path.exists(out) and os.path.getsize(out) > 0:
             with open(out, "rb") as f:
                 return f.read(), None
@@ -242,14 +258,36 @@ def screenshot(url: str) -> tuple[bytes | None, str | None]:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def reference(entity: dict) -> tuple[str | None, bytes | None, str | None]:
+    """(url, png, error): a screenshot of the entity's official website, to compare a suspected copy with.
+    Taken once and kept in storage (references/<domain>.png)."""
+    domain = (entity.get("domains") or [None])[0]
+    if not domain:
+        return None, None, "the registry lists no official domain"
+    url = f"https://{domain}/"
+    if domain in _refs:
+        return url, _refs[domain], None
+    path = f"references/{domain}.png"
+    try:
+        data = supa.storage_get(BUCKET, path)
+    except supa.SupabaseError:
+        data, error = screenshot(url, scale=1)
+        if not data:
+            return url, None, error
+        try:
+            supa.storage_put(BUCKET, path, data, "image/png")
+        except supa.SupabaseError:
+            pass  # still usable for this run
+    _refs[domain] = data
+    return url, data, None
+
+
 # ---- capture ----------------------------------------------------------------------------------
 def capture(url_row: dict, by: str) -> dict:
     """Capture all evidence for one link now and store it. Returns the evidence row."""
     url = url_row["url"]
     host = urlsplit(url).hostname or url_row["domain"]
-    is_test = host.endswith(".localhost")
-    # the same rule as the fetcher: internal addresses are never opened
-    allowed = (is_test and fetcher.ALLOW_TEST_SITES) or (not is_test and fetcher._public_host(host))
+    allowed = can_open(url)
     at = datetime.now(timezone.utc)
     errors: dict = {}
     with ThreadPoolExecutor(max_workers=4) as ex:
@@ -429,6 +467,14 @@ def report_html(g: dict, by: str, screenshot: bytes | None) -> str:
     decisions = "".join(f"<li>{ltr(_uae(a['at']))} · {esc(a['actor'])} · {esc(a['action'])}</li>" for a in g["decisions"])
     reasons = "".join(f"<li>{esc(r.get('ar'))}<br><small dir=\"ltr\">{esc(r.get('en'))}</small></li>"
                       for r in v.get("reasons") or [])
+    ai = v.get("ai") or {}
+    visual = ""
+    if ai.get("visual_notes_ar") or ai.get("visual_similarity") is not None:
+        sim = ai.get("visual_similarity")
+        visual = ("<h2>التحليل البصري</h2><table>" + rows([
+            ("الشبه بالموقع الرسمي", f"{int(sim)}%" if sim is not None else "لم تُقارن"),
+            ("ما رآه الوكيل في لقطة الشاشة", f"{esc(ai.get('visual_notes_ar'))}<br><small dir=\"ltr\">{esc(ai.get('visual_notes_en'))}</small>"),
+        ]) + "</table>")
     shot = (f'<img src="data:image/png;base64,{base64.b64encode(screenshot).decode()}" alt="لقطة شاشة كما يراها الهاتف">'
             if screenshot else '<p class="muted">لا توجد لقطة شاشة.</p>')
     return f"""<!doctype html>
@@ -468,6 +514,7 @@ def report_html(g: dict, by: str, screenshot: bytes | None) -> str:
 ])}</table></div>
 
 <h2>أسباب الحكم</h2><ul>{reasons or '<li>—</li>'}</ul>
+{visual}
 
 <h2>تسجيل النطاق (WHOIS / RDAP)</h2>
 <table>{rows([

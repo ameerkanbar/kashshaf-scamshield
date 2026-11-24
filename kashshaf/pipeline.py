@@ -1,9 +1,26 @@
 """Inspect one URL: official check -> two-view fetch -> rules -> Claude agent -> stored verdict."""
+import threading
 from datetime import datetime, timedelta, timezone
 
 from . import agent, config, control, evidence, fetcher, rules, store, supa
 
 UAE = timezone(timedelta(hours=4))  # Abu Dhabi time, no daylight saving
+RECHECK_MINUTES = (5, 15, 30)  # the AI service failed (overloaded, down): check the link again later
+_rechecks: dict[int, int] = {}
+
+
+def _recheck_later(url_row: dict) -> int | None:
+    """Queue the link again after a delay, at most three times. Returns the delay in minutes."""
+    n = _rechecks.get(url_row["id"], 0)
+    if n >= len(RECHECK_MINUTES):
+        return None
+    _rechecks[url_row["id"]] = n + 1
+    # only a finished link goes back in the queue, never one an agent is checking right now
+    timer = threading.Timer(RECHECK_MINUTES[n] * 60, lambda: supa.update(
+        "urls", {"status": "queued", "priority": 10, "attempts": 0}, id=f"eq.{url_row['id']}", status="eq.done"))
+    timer.daemon = True
+    timer.start()
+    return RECHECK_MINUTES[n]
 
 
 def inspect(url_row: dict, agent_name: str) -> dict:
@@ -61,11 +78,17 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     result = None
     if agent.enabled() and ev["score"] >= config.AGENT_MIN_RULE_SCORE:
         result = agent.investigate(url, ev)
+    if not result and agent.failure() == "api" and (minutes := _recheck_later(url_row)):
+        verdict["reasons"] = verdict["reasons"] + [{"points": 0, "by": "rules",
+            "ar": f"خدمة Claude مشغولة الآن: الحكم مؤقت من القواعد، ويُعاد الفحص الكامل تلقائياً بعد {minutes} دقيقة",
+            "en": f"The Claude service is busy: a provisional rules verdict; the full check runs again in {minutes} minutes"}]
+    elif result:
+        _rechecks.pop(url_row["id"], None)
     if not result and ev["score"] > 0 and verdict["verdict"] == "safe":
         # the rules saw warning signs but the full check could not run: not sure = suspicious,
         # so it is blocked until an analyst looks at it
         verdict.update(verdict="suspicious", score=max(ev["score"], rules.SUSPICIOUS_AT))
-        verdict["reasons"] = ev["reasons"] + [{"points": 0, "by": "rules",
+        verdict["reasons"] = verdict["reasons"] + [{"points": 0, "by": "rules",
             "ar": "ظهرت علامات تحذير ولم يكتمل التحقيق الكامل: محظور احترازياً حتى يراجعه محلل",
             "en": "Warning signs and the full investigation could not run: blocked as a precaution until an analyst reviews it"}]
     if result:
@@ -76,7 +99,9 @@ def inspect(url_row: dict, agent_name: str) -> dict:
             else verdict["claimed_entity_id"],
             reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
                                      for ar, en in zip(result.get("reasons_ar") or [], result.get("reasons_en") or [])],
-            ai={"summary_ar": result.get("summary_ar"), "summary_en": result.get("summary_en"), "trace": result.get("trace")})
+            ai={"summary_ar": result.get("summary_ar"), "summary_en": result.get("summary_en"), "trace": result.get("trace"),
+                "visual_similarity": result.get("visual_similarity"),
+                "visual_notes_ar": result.get("visual_notes_ar") or "", "visual_notes_en": result.get("visual_notes_en") or ""})
 
     store.save_result(url_row, agent_name, scan, verdict)
     if verdict["verdict"] in store.BLOCKING:
