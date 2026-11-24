@@ -14,10 +14,13 @@ Dhabi Police warning page.
 | Database | Supabase Postgres: registry, queue, scans, verdicts, fingerprints, blocklist, audit log | `supabase/migrations/` |
 | Discovery | SerpAPI (Google, ads, AI Overviews, Maps), crt.sh, OpenPhish | `kashshaf/discovery.py` |
 | Agent pool | N workers claim URLs with `claim_url()` (`FOR UPDATE SKIP LOCKED`), safe across machines | `kashshaf/workers.py` |
+| Agent company | The agents work as a company: a chief, and 7 departments (discovery, intake, web two-view, content, fingerprints, domain, AI), each with a leader and members. A case moves department to department and waits when a department is full; the chief gives the verdict. Minimum 15 agents | `kashshaf/org.py` |
 | Rules | Two-view fetch, cloaking, registry match, payment/OTP asks, Telegram exfil, domain age | `kashshaf/rules.py` |
 | Claude agent | Tools: `fetch_page`, `lookup_official_entity`, `domain_registration`, `web_search`, `submit_verdict` | `kashshaf/agent.py` |
-| Server | Analyst dashboard (Supabase login), API, safe-link gateway, warning page | `server.py`, `web/` |
+| Server | Analyst dashboard (Supabase login, Arabic/English), API, safe-link gateway, warning page | `server.py`, `web/` |
+| Dashboard | Home is the operations room: live radar, discover → check → verdict → block pipeline, one tile per agent, live feed, and charts from `/api/insights` | `web/index.html`, `web/assets/app.js`, `web/assets/i18n.js` |
 | Extension | Redirects blocked domains to the warning page | `extension/` |
+| HQ game | `/hq`: a walkable 2D headquarters in Abu Dhabi Police colours. Each room is one dashboard tab (press Space at the officer); the detention cells hold the blocked sites, grouped by the kind of body they impersonate | `web/hq.html`, `web/assets/hq/` |
 
 ## Setup
 

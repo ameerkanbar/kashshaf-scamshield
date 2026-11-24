@@ -1,6 +1,6 @@
 """Kashshaf server: analyst dashboard, API, agent pool, safe-link gateway and warning page.
 
-Run:  .venv/bin/python server.py      then open http://localhost:8080
+Run:  .venv/bin/python server.py      then open http://localhost:8080 (the HQ game is at /hq)
 """
 import argparse
 import json
@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from kashshaf import config  # loads .env first
-from kashshaf import agent, control, discovery, pipeline, store, supa
+from kashshaf import agent, control, discovery, health, org, pipeline, store, supa
 from kashshaf.workers import Pool
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -37,7 +37,9 @@ def run_discovery(kind: str, actor: str, **kw) -> None:
         try:
             fn = {"google": lambda: discovery.run_personas(kw.get("limit")),
                   "ct": discovery.run_ct_logs, "feed": discovery.run_phish_feed}[kind]
-            n = fn()
+            with org.current().dept("discovery").work(kind, "discovery") as m:  # a discovery agent runs the round
+                n = fn()
+                org.current().report(m, "ok" if n else "info", f"أضاف {n} رابط للطابور", f"Queued {n} links")
             discovery_state["last"] = {"kind": kind, "queued": n, "at": time.time(), "error": None}
         except Exception as e:
             discovery_state["last"] = {"kind": kind, "queued": 0, "at": time.time(), "error": str(e)[:300]}
@@ -122,8 +124,10 @@ class Handler(BaseHTTPRequestHandler):
         # Public: pages, blocklist feed, lookup and gateway
         if path in ("/", "/index.html"):
             return self.static("index.html")
-        if path == "/room":
-            return self.static("room.html")
+        if path == "/room":  # the operations room is now the dashboard's home page
+            return self._send(302, b"", "text/plain", {"Location": "/#ops"})
+        if path == "/hq":
+            return self.static("hq.html")
         if path == "/blocked":
             return self.static("blocked.html")
         if path.startswith("/assets/") or path == "/blocked.js":
@@ -151,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.json({"error": "login required"}, 401)
         sort = q.get("sort") if q.get("sort") in store.SORTS else "new"
         if path == "/api/state":
-            return self.json({"stats": store.stats(), "agents": pool.state(), "discovery": discovery_state,
+            return self.json({"stats": store.stats(), "agents": pool.state(), "org": pool.org.snapshot(), "discovery": discovery_state,
                               "control": control.snapshot(),
                               "ai": agent.enabled(), "model": agent.MODEL if agent.enabled() else None,
                               "google": bool(config.SERPAPI_KEY), "user": user.get("email")})
@@ -173,6 +177,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json(store.audit_log(40, ["google_search", "phish_feed", "ct_logs", "budget_reached",
                                                       "google_error", "search_stop", "patrol_start"], sort))
             return self.json(store.audit_log(sort=sort))
+        if path == "/api/integrations":  # Settings page: live status of every outside service
+            return self.json({"services": health.check(), "settings": health.settings()})
+        if path == "/api/insights":
+            return self.json(store.insights())
         if path == "/api/registry":
             return self.json(store.registry()["entities"])
         return self.json({"error": "not found"}, 404)
@@ -220,7 +228,10 @@ class Handler(BaseHTTPRequestHandler):
                 def one():
                     discovery_state["running"] = "query"
                     try:
-                        r = discovery.search_google(data["query"], hl=hl, force=force, by=actor)
+                        with org.current().dept("discovery").work(data["query"], "discovery") as m:
+                            r = discovery.search_google(data["query"], hl=hl, force=force, by=actor)
+                            org.current().report(m, "ok", f"«{data['query']}»: {r['new']} جديد · {r['known_blocked']} محظور",
+                                                 f"“{data['query']}”: {r['new']} new · {r['known_blocked']} blocked")
                         discovery_state["last"] = {"kind": "query", "queued": r["new"], "known": r["known"],
                                                    "known_blocked": r["known_blocked"], "at": time.time(), "error": None}
                     except control.BudgetExceeded as e:
@@ -258,6 +269,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.json({"error": "domain and action (block, allow or null) required"}, 400)
             store.set_override(data["domain"].lower(), action, actor, data.get("note"))
             return self.json({"ok": True})
+        if path == "/api/integrations/test":  # one service, with a real request where that costs (Claude)
+            sid = data.get("id")
+            if sid not in health.CHECKS:
+                return self.json({"error": "unknown service"}, 400)
+            store.audit(actor, "integration_test", sid)
+            return self.json(health.check(sid, test=True)[0])
         if path == "/api/rescan":
             row = store.queue_url(data["url"], "analyst", priority=10, requeue=True)
             pool.notify()

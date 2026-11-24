@@ -1,410 +1,627 @@
-// Kashshaf analyst dashboard. Login with Supabase Auth; every API call carries the analyst's access token.
+// Kashshaf dashboard: Supabase login, live operations room, charts, and every analyst page in Arabic and English.
 (async function () {
-  const $ = (s) => document.querySelector(s);
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const VERDICT = { fraud: "احتيال", suspicious: "مشبوه", safe: "آمن", official: "رسمي", unreachable: "تعذّر الفتح" };
-  const SOURCE = { message: "رسالة", serp_organic: "نتائج جوجل", serp_ad: "إعلان جوجل", serp_ai_overview: "ملخص الذكاء الاصطناعي",
-    maps: "الخرائط", ct_log: "سجل الشهادات", phish_feed: "قائمة تصيّد", analyst: "محلل", gateway: "رابط محمي", seed: "تجربة" };
-  const pill = (v) => `<span class="pill v-${esc(v)}">${VERDICT[v] || esc(v)}</span>`;
-  // Date and time everywhere, e.g. 23/11/2026 · 3:24:56 م. Accepts ISO strings or Unix seconds.
-  const time = (t) => {
-    if (!t) return "";
-    const d = typeof t === "number" ? new Date(t * 1000) : new Date(t);
-    const date = d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
-    const clock = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    return `<span class="ts" dir="ltr" title="${d.toISOString()}">${date} · ${clock}</span>`;
-  };
-  const ACTION = { google_search: "بحث جوجل", phish_feed: "قوائم التصيّد", ct_logs: "سجلات الشهادات", budget_reached: "وصل حد البحث",
-    google_error: "خطأ في البحث", search_stop: "إيقاف البحث", patrol_start: "تشغيل الدورية" };
 
+  /* ---------------- language ---------------- */
+  const L = window.KI18N, LANG_KEY = "kashshaf.lang";
+  let lang = "ar";
+  try { lang = localStorage.getItem(LANG_KEY) === "en" ? "en" : "ar"; } catch { /* storage off */ }
+  const t = (k, v = {}) => String(L[lang][k] ?? L.ar[k] ?? k).replace(/\{(\w+)\}/g, (_, x) => v[x] ?? "");
+  const rtl = () => lang === "ar";
+  const ent = (o, base = "entity") => (lang === "en" ? o?.[`${base}_en`] : o?.[`${base}_ar`]) || o?.[`${base}_ar`] || o?.[`${base}_en`] || "";
+
+  const ICONS = {
+    radar: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12l6-6"/>', chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    scan: '<path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2M7 12h10"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', block: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6 6 0 0 1 3.5 6"/>',
+    log: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/>', out: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
+    menu: '<path d="M4 6h16M4 12h16M4 18h16"/>', play: '<path d="M7 4l13 8-13 8z"/>', stop: '<rect x="6" y="6" width="12" height="12" rx="2"/>',
+    queue: '<rect x="3" y="4" width="18" height="4" rx="1"/><rect x="3" y="10" width="18" height="4" rx="1"/><rect x="3" y="16" width="18" height="4" rx="1"/>',
+    alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>', shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', download: '<path d="M12 4v12M7 11l5 5 5-5M4 20h16"/>', send: '<path d="M4 12l16-8-6 16-3-7z"/>',
+    cert: '<rect x="4" y="3" width="16" height="13" rx="2"/><path d="M8 8h8M8 11h5M10 16l-1 5 3-2 3 2-1-5"/>', fish: '<path d="M3 12c4-6 11-6 15 0-4 6-11 6-15 0z"/><path d="M18 12l3-3v6zM8 11h.01"/>',
+    org: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="9" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M5 16v-2h14v2M12 12v4"/>',
+    fp: '<path d="M12 11v3a6 6 0 0 1-1 3.5M8.5 9.5a4 4 0 0 1 7 2.5v2M5.5 10a7 7 0 0 1 13 2v1M7 19a9 9 0 0 0 1-4M17 15.5c0 1.8-.4 3.5-1.2 5"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+    refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>',
+    crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
+    eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>', hand: '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.5L8 15"/>',
+  };
+  const icon = (n) => `<i data-icon="${n}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ""}</svg></i>`;
+  const paintIcons = (root = document) => $$("[data-icon]", root).forEach((el) => { if (!el.firstChild) el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[el.dataset.icon] || ""}</svg>`; });
+
+  const VCLASS = ["fraud", "suspicious", "official", "safe", "unreachable"];
+  const VCOLOR = { fraud: "#d03b3b", suspicious: "#ec835a", official: "#2a78d6", safe: "#0ca30c", unreachable: "#7d8794" };
+  const pill = (v) => `<span class="pill v-${esc(v)}">${esc(t("v." + v))}</span>`;
+  const src = (s) => esc(t("src." + s));
+  const time = (v) => {
+    if (!v) return "";
+    const d = typeof v === "number" ? new Date(v * 1000) : new Date(v);
+    return `<span class="ts" title="${d.toISOString()}">${d.toLocaleDateString("en-GB")} · ${d.toLocaleTimeString("en-GB")}</span>`;
+  };
+  function countTo(el, to) {
+    if (!el) return;
+    const from = +el.dataset.v || 0, sfx = el.dataset.suffix || ""; el.dataset.v = to;
+    if (from === to || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.textContent = to.toLocaleString("en") + sfx; return; }
+    const t0 = performance.now();
+    const step = (now) => { const k = Math.min(1, (now - t0) / 700); el.textContent = Math.round(from + (to - from) * (1 - (1 - k) ** 3)).toLocaleString("en") + sfx; if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+
+  /* ---------------- auth ---------------- */
   const cfg = await fetch("/api/config").then((r) => r.json());
   const sb = supabase.createClient(cfg.supabase_url, cfg.supabase_key);
   let session = (await sb.auth.getSession()).data.session;
-  let tab = "overview", timer = null;
-
-  // One sort for every list on every page, remembered in this browser (the operations room reads it too).
-  const SORT_KEY = "kashshaf.sort", SORT_LABEL = { new: "الأحدث أولاً", old: "الأقدم أولاً", risk: "الأخطر أولاً" };
-  let sort = "new";
-  try { sort = localStorage.getItem(SORT_KEY) || "new"; } catch { /* storage off: default order */ }
-  if (!SORT_LABEL[sort]) sort = "new";
-
+  sb.auth.onAuthStateChange((_e, s) => { session = s; });
   async function api(path, body) {
-    const res = await fetch(path, {
-      method: body ? "POST" : "GET",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (res.status === 401) { showLogin(); throw new Error("login required"); }
+    const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 401) { showLogin(); throw new Error(t("err.session")); }
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
   }
-
-  // ---- auth --------------------------------------------------------------
-  function showLogin() { $("#app").hidden = true; $("#login").hidden = false; clearInterval(timer); }
-  function showApp() { $("#login").hidden = true; $("#app").hidden = false; $("#userEmail").textContent = session.user.email; refresh(); timer = setInterval(refresh, 3000); window.KashshafTour?.maybeStart(); }
+  let timers = [];
+  function showLogin() { timers.forEach(clearInterval); timers = []; $("#app").hidden = true; $("#login").hidden = false; }
+  function showApp() {
+    $("#login").hidden = true; $("#app").hidden = false;
+    $("#userEmail").textContent = session.user.email; $("#avatar").textContent = session.user.email[0];
+    route(); refreshState(); timers.forEach(clearInterval);
+    let tick = 0; // the live view refreshes every 1.5 s, the other pages every 3 s
+    timers = [setInterval(() => { tick++; if (page === "live" || tick % 2 === 0) refreshState(); }, 1500), setInterval(() => loadPage(true), 6000)];
+  }
   $("#loginForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    $("#loginError").textContent = "";
+    e.preventDefault(); $("#loginError").textContent = ""; $("#loginBtn").disabled = true;
     const { data, error } = await sb.auth.signInWithPassword({ email: $("#email").value, password: $("#password").value });
-    if (error) { $("#loginError").textContent = "بيانات الدخول غير صحيحة"; return; }
-    session = data.session; showApp();
+    $("#loginBtn").disabled = false;
+    if (error) { $("#loginError").textContent = t("login.error"); return; }
+    session = data.session; $("#password").value = ""; showApp();
   });
   $("#logout").onclick = async () => { await sb.auth.signOut(); session = null; showLogin(); };
-  sb.auth.onAuthStateChange((_e, s) => { session = s; });
 
-  // ---- tabs --------------------------------------------------------------
-  $("#nav").addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-tab]");
-    if (!b) return;
-    tab = b.dataset.tab;
-    document.querySelectorAll("#nav button").forEach((x) => x.classList.toggle("active", x === b));
-    document.querySelectorAll("[data-view]").forEach((v) => (v.hidden = v.dataset.view !== tab));
-    refresh();
-  });
-
-  // ---- renderers ---------------------------------------------------------
-  function findingRow(f) {
-    return `<tr>
-      <td>${pill(f.verdict)}<div class="muted">${f.score}/100</div>${f.cloaked ? '<span class="tag">إخفاء</span>' : ""}</td>
-      <td class="nowrap">${time(f.created_at)}</td>
-      <td><span class="url">${esc(f.url)}</span><div class="muted">${esc(f.title || "")}</div></td>
-      <td>${esc(f.entity_ar || "—")}</td>
-      <td>${(f.sources || []).map((s) => `<span class="tag">${SOURCE[s] || esc(s)}</span>`).join("")}<div class="muted">${f.sightings} ظهور</div></td>
-      <td>${f.blocked ? '<span class="blocked">محظور</span>' : "—"}${f.override ? `<div class="muted">يدوي: ${f.override === "block" ? "حظر" : "سماح"}</div>` : ""}</td>
-      <td><button class="btn btn-sm" data-open="${f.url_id}">التفاصيل</button></td></tr>`;
+  /* ---------------- routing ---------------- */
+  const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "blocked", "gangs", "discover", "agents", "audit"];
+  let page = "ops";
+  function route() {
+    const p = location.hash.slice(1);
+    page = PAGES.includes(p) ? p : "ops";
+    $$("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === page || (page === "live" && a.dataset.page === "org")));
+    $$("[data-view]").forEach((v) => (v.hidden = v.dataset.view !== page));
+    header(); $("#app").classList.remove("menu-open");
+    loadPage(); window.scrollTo({ top: 0 });
   }
+  const header = () => { $("#pageTitle").textContent = t(`page.${page}`); $("#pageSub").textContent = t(`page.${page}.sub`); document.title = `${t(`page.${page}`)} | ${t("brand")}`; };
+  window.addEventListener("hashchange", route);
+  $("#menuBtn").onclick = () => $("#app").classList.toggle("menu-open");
+  $("#scrim").onclick = () => $("#app").classList.remove("menu-open");
 
-  // Every 3 seconds: the status (from /api/state) and the current tab's list load side by side.
-  let lastState = null;
-  async function refresh() {
-    if (!session) return;
-    await Promise.all([refreshState(), loadList()]);
+  const SORT_KEY = "kashshaf.sort";
+  let sort = "new";
+  try { sort = localStorage.getItem(SORT_KEY) || "new"; } catch { /* default */ }
+  $("#sortOrder").value = sort;
+  $("#sortOrder").onchange = () => { sort = $("#sortOrder").value; try { localStorage.setItem(SORT_KEY, sort); } catch { /* this page */ } loadPage(); };
+
+  function applyLang() {
+    const h = document.documentElement; h.lang = lang; h.dir = L[lang].dir;
+    $$("[data-i18n]").forEach((el) => (el.textContent = t(el.dataset.i18n)));
+    $$("[data-i18n-ph]").forEach((el) => (el.placeholder = t(el.dataset.i18nPh)));
+    $$("[data-i18n-aria]").forEach((el) => el.setAttribute("aria-label", t(el.dataset.i18nAria)));
+    $$("[data-lang-toggle]").forEach((b) => (b.textContent = t("other")));
+    $("#radarLegend").innerHTML = VCLASS.map((v) => `<span><i style="background:${VCOLOR[v]}"></i>${t("v." + v)}</span>`).join("");
+    if (session && !$("#app").hidden) { header(); Object.values(charts).forEach((c) => c.destroy()); charts = {}; lastFeed = new Set(); renderState(); loadPage(); }
   }
+  $$("[data-lang-toggle]").forEach((b) => (b.onclick = () => { lang = lang === "ar" ? "en" : "ar"; try { localStorage.setItem(LANG_KEY, lang); } catch { /* this page */ } applyLang(); }));
 
+  /* ---------------- live state ---------------- */
+  let st = null;
+  let stateBusy = false; // one request at a time: a slow server never gets a pile of overlapping polls
   async function refreshState() {
-    const t = tab;
-    try {
-      const st = lastState = await api("/api/state");
-      const s = st.stats;
-      $("#statusStrip").innerHTML = [
-        [`وكيل Claude ${st.ai ? "يعمل" : "متوقف (القواعد فقط)"}`, st.ai],
-        [!st.google ? "بحث جوجل غير متصل" : st.control.serp_exhausted ? "بحث جوجل: انتهى الرصيد" : "بحث جوجل متصل", st.google && !st.control.serp_exhausted],
-        [`${st.agents.length} وكيل · ${st.agents.filter((a) => a.status === "working").length} يعمل الآن`, true],
-        [st.discovery.running ? `جارٍ الاكتشاف: ${st.discovery.running}` : "لا يوجد اكتشاف قيد التشغيل", !!st.discovery.running],
-        [!st.control.running ? "الوكلاء متوقفون" : st.control.patrol ? "الدورية المستمرة تعمل" : "الوكلاء جاهزون", st.control.running],
-      ].map(([text, on]) => `<span class="chip ${on ? "on" : "off"}">${esc(text)}</span>`).join("");
-
-      if (t === "overview") {
-        $("#kpis").innerHTML = [["روابط مفحوصة", s.urls], ["في الانتظار", s.queued + s.checking], ["مواقع محظورة", s.blocked, "danger"],
-          ["احتيال", s.fraud, "danger"], ["مشبوه", s.suspicious], ["مواقع تخفي نفسها", s.cloaked], ["مواقع رسمية", s.official], ["رسائل", s.messages]]
-          .map(([k, v, c]) => `<div class="kpi ${c || ""}"><b>${v}</b><span>${k}</span></div>`).join("");
-      }
-      if (t === "agents") {
-        const c = st.control;
-        $("#stopBtn").hidden = !c.running; $("#startBtn").hidden = c.running;
-        $("#runState").textContent = !c.running ? "· متوقفون" : c.patrol ? "· الدورية تعمل" : "· يعملون";
-        $("#runState").className = `run-state ${c.running ? "on" : "off"}`;
-        $("#budgetLine").textContent = `هذه الساعة: ${c.serp_hour}/${c.serp_cap} بحث جوجل · ${c.ai_hour}/${c.ai_cap} تحقيق Claude · `
-          + `التوكنز منذ تشغيل السيرفر: ${(c.input_tokens + c.output_tokens).toLocaleString("en")} · `
-          + `وفّرت الذاكرة: ${c.serp_saved} بحث و${c.ai_saved} تحقيق`;
-        $("#agentsGrid").innerHTML = st.agents.map((a) => `<div class="agent-dot ${a.status}" title="${esc(a.name)}"></div>`).join("");
-        renderAgents(st.agents);
-      }
-      if (t === "discover") {
-        const c = st.control, run = st.discovery.running;
-        const KIND = { google: "جولة كل السكان", query: "بحث جوجل", ct: "سجلات الشهادات", feed: "قوائم التصيّد" };
-        const searching = !!run || c.patrol;
-        $("#searchState").innerHTML = run ? `يعمل الآن: ${KIND[run] || esc(run)}${c.patrol ? " + الدورية المستمرة" : ""}`
-          : c.patrol ? `الدورية المستمرة تعمل منذ ${time(c.patrol_since)}` : "لا يوجد بحث يعمل الآن";
-        $("#searchDot").className = `dot ${searching ? "on" : ""}`;
-        $("#stopSearchBtn").hidden = !searching;
-        $("#searchRun").classList.toggle("active", searching);
-        const l = st.discovery.last;
-        if (l && !$("#discoverMsg").dataset.keep) $("#discoverMsg").innerHTML = l.error ? `خطأ: ${esc(l.error)} · ${time(l.at)}`
-          : `آخر تشغيل (${KIND[l.kind] || esc(l.kind)}): ${l.queued} رابط جديد${l.known != null ? ` · ${l.known} موجود مسبقاً لم يُعد فحصه` : ""} · ${time(l.at)}`;
-      }
-    } catch (e) { console.warn(e); }
+    if (stateBusy) return;
+    stateBusy = true;
+    try { st = await api("/api/state"); renderState(); } catch (e) { console.warn(e); } finally { stateBusy = false; }
+  }
+  const hitUntil = new Map(), lastHits = new Map();
+  function renderState() {
+    if (!st) return;
+    const s = st.stats, c = st.control, working = st.agents.filter((a) => a.status === "working").length;
+    $("#chips").innerHTML = [[st.ai ? t("chip.ai.on") : t("chip.ai.off"), st.ai], [!st.google ? t("chip.google.off") : c.serp_exhausted ? t("chip.google.out") : t("chip.google.on"), st.google && !c.serp_exhausted],
+      [!c.running ? t("chip.stopped") : c.patrol ? t("chip.patrol") : t("chip.running"), c.running]].map(([x, on]) => `<span class="chip ${on ? "on" : "off"}"><i></i>${esc(x)}</span>`).join("");
+    $$(".live-dot").forEach((d) => d.classList.toggle("off", !c.running));
+    $("#navBlocked").textContent = s.blocked || "";
+    // hero + controls
+    $("#heroText").textContent = t("hero.text", { n: st.agents.length });
+    if (document.activeElement !== $("#heroCount")) $("#heroCount").value = st.agents.length;
+    if (document.activeElement !== $("#agentCount")) $("#agentCount").value = st.agents.length;
+    $("#patrolBtn").disabled = c.patrol; $("#stopBtn").hidden = !c.running; $("#startBtn").hidden = c.running;
+    $("#stopBtn2").hidden = !c.running; $("#startBtn2").hidden = c.running;
+    // pipeline
+    const stage = (k, v) => { const el = $(`[data-stage="${k}"]`); countTo($("[data-n]", el), v); el.classList.toggle("busy", v > 0 && c.running); };
+    stage("discover", s.urls); stage("queue", s.queued); stage("check", working); stage("verdict", s.fraud); stage("block", s.blocked);
+    $("#pipe").classList.toggle("paused", !c.running);
+    // agent company: hits light up for a few seconds, the ops card and the company page draw from st.org
+    const now = Date.now();
+    st.agents.forEach((a) => { if ((a.hits || 0) > (lastHits.get(a.name) ?? a.hits)) hitUntil.set(a.name, now + 6000); lastHits.set(a.name, a.hits || 0); });
+    renderDeptSum();
+    if (page === "org") renderOrg();
+    if (page === "live") renderLive();
+    // patrol + spending
+    $("#patrolLast").innerHTML = patrolText(c);
+    const meter = (label, v, cap) => `<div class="meter"><div class="top"><span>${label}</span><b class="num">${v}/${cap}</b></div><div class="track"><i class="${v >= cap ? "full" : ""}" style="width:${cap ? Math.min(100, (100 * v) / cap) : 0}%"></i></div></div>`;
+    $("#spend").innerHTML = meter(t("spend.serp"), c.serp_hour, c.serp_cap) + meter(t("spend.ai"), c.ai_hour, c.ai_cap)
+      + `<div class="spend-line"><span>${t("spend.tokens")}</span><b class="num">${(c.input_tokens + c.output_tokens).toLocaleString("en")}</b></div>`
+      + `<div class="spend-line"><span>${t("spend.saved")}</span><b>${t("spend.savedv", { s: c.serp_saved, a: c.ai_saved })}</b></div>`;
+    if (page === "agents") renderAgents();
+    if (page === "discover") renderDiscoverState();
+    if (page === "ops" && insights) opsKpis();
+  }
+  function patrolText(c) {
+    if (!c.running) return t("patrol.stopped");
+    if (!c.patrol) return t("patrol.off");
+    const l = c.patrol_last; if (!l) return t("patrol.started");
+    const at = l.at ? `${time(l.at)}<br>` : "";
+    if (l.kind === "google") return at + esc(t("patrol.google", { q: l.query, p: l.persona, n: l.queued }));
+    if (l.kind === "feed") return at + esc(t("patrol.feed", { n: l.queued }));
+    if (l.kind === "ct") return at + esc(t("patrol.ct", { n: l.queued }));
+    if (l.kind === "paused") return at + esc(t("patrol.paused"));
+    return at + esc(t("patrol.error", { e: l.error || "" }));
   }
 
-  // Newest: agents working now (latest start first), then the latest to finish. Oldest: the reverse.
-  // Most dangerous: the agents that caught the most fraud. Agents that have not worked yet stay last.
-  function renderAgents(list) {
-    const act = (a) => (a.status === "working" ? a.since : a.last_done) || 0;
-    const when = (a) => (a.status === "working" ? 1e12 : 0) + act(a); // working now counts as the newest
-    const agents = [...list].sort((a, b) => !act(a) - !act(b)
-      || (sort === "risk" ? b.hits - a.hits || b.done - a.done : sort === "old" ? when(a) - when(b) : when(b) - when(a))
-      || a.id - b.id);
-    $("#agentsBody").innerHTML = agents.map((a) => `<tr><td>${esc(a.name)}</td><td>${a.status === "working" ? "يعمل" : a.status === "paused" ? "متوقف" : "متاح"}</td>
-      <td>${a.done}</td><td>${a.hits ? `<span class="blocked">${a.hits}</span>` : 0}</td><td><span class="url">${esc(a.job || "")}</span></td>
-      <td class="nowrap">${time(a.since) || "—"}</td><td class="nowrap">${time(a.last_done) || "—"}</td></tr>`).join("");
+  // controls (hero and agents page)
+  async function control(action, msgEl, okText) {
+    const count = Math.max(1, Math.min(500, +(page === "agents" ? $("#agentCount") : $("#heroCount")).value || 50));
+    try { await api("/api/control", action === "patrol" ? { action, count } : { action }); msgEl.textContent = okText; msgEl.className = "msg"; }
+    catch (e) { msgEl.textContent = e.message; msgEl.className = "msg err"; }
+    refreshState();
   }
-
-  // The current tab's list in the chosen order. Also runs on its own, right away, when the sort changes.
-  async function loadList() {
-    const t = tab, asked = sort;
-    const stale = () => asked !== sort || t !== tab; // a newer load will draw it
-    try {
-      if (t === "overview") {
-        const [fraud, gangs] = await Promise.all([api(`/api/findings?verdict=fraud&limit=8&sort=${asked}`), api(`/api/gangs?sort=${asked}`)]);
-        if (stale()) return;
-        document.querySelectorAll(".sort-note").forEach((n) => (n.textContent = `· ${SORT_LABEL[asked]}`));
-        $("#latestFraud").innerHTML = fraud.map((f) => `<div class="list-item"><span class="url">${esc(f.url)}</span>
-          <span class="muted">${esc(f.entity_ar || "")} · ${time(f.created_at)}</span> <button class="link" data-open="${f.url_id}">التفاصيل</button></div>`).join("") || '<p class="empty">لا يوجد بعد.</p>';
-        $("#topGangs").innerHTML = gangs.slice(0, 5).map((g, i) => `<div class="list-item"><b>عصابة ${i + 1}</b> · ${g.domains.length} مواقع
-          <span class="muted">· آخر نشاط ${time(g.last_seen)}</span>
-          <div>${g.indicators.slice(0, 3).map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div></div>`).join("") || '<p class="empty">لا يوجد بعد.</p>';
-      }
-      if (t === "findings") {
-        const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort: asked });
-        const rows = await api(`/api/findings?${q}`);
-        if (stale()) return;
-        $("#findingsBody").innerHTML = rows.map(findingRow).join("") || '<tr><td colspan="7" class="empty">لا توجد نتائج.</td></tr>';
-      }
-      if (t === "gangs") {
-        const gangs = await api(`/api/gangs?sort=${asked}`);
-        if (stale()) return;
-        $("#gangsList").innerHTML = gangs.map((g, i) => `<div class="gang"><h3>عصابة ${i + 1} · ${g.domains.length} مواقع</h3>
-          <p class="muted gang-time">أول ظهور ${time(g.first_seen)} · آخر نشاط ${time(g.last_seen)}</p>
-          ${g.domains.map((d) => `<span class="url">${esc(d)}</span>`).join("")}
-          <div>${g.indicators.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div></div>`).join("") || '<p class="empty">لا توجد مواقع مرتبطة بعد.</p>';
-      }
-      if (t === "blocked") {
-        const rows = await api(`/api/blocked?sort=${asked}`);
-        if (stale()) return;
-        blockedRows = rows;
-        renderBlocked();
-      }
-      if (t === "scan") await updateScan();
-      if (t === "audit") {
-        const log = await api(`/api/audit?sort=${asked}`);
-        if (stale()) return;
-        $("#auditBody").innerHTML = log.map((l) => `<tr><td>${time(l.at)}</td><td>${esc(l.actor)}</td><td>${esc(l.action)}</td>
-          <td><span class="url">${esc(l.target || "")}</span></td></tr>`).join("");
-      }
-      if (t === "discover") {
-        const log = await api(`/api/searches?sort=${asked}`);
-        if (stale()) return;
-        $("#searchLogBody").innerHTML = log.map((x) => `<tr><td class="nowrap">${time(x.searched_at)}</td>
-          <td>${x.purpose === "agent" ? '<span class="tag">بحث الوكيل</span>' : '<span class="tag">بحث كساكن</span>'}${x.maps ? '<span class="tag">+ الخرائط</span>' : ""}</td>
-          <td dir="auto">${esc(x.query)}</td><td>${x.purpose === "agent" ? "—" : x.new_links}</td><td>${x.purpose === "agent" ? "—" : x.known_links}</td>
-          <td>${x.purpose === "agent" ? "—" : (x.blocked_now ?? x.known_blocked) ? `<span class="blocked">${x.blocked_now ?? x.known_blocked}</span>` : 0}${x.suspicious_now ? `<div class="muted">+${x.suspicious_now} مشبوه</div>` : ""}</td>
-          <td>${esc(x.searched_by || "")}</td></tr>`).join("") || '<tr><td colspan="7" class="empty">لا يوجد بحث بعد.</td></tr>';
-      }
-    } catch (e) { console.warn(e); }
-  }
-
-  // ---- check a message or link: only the latest check is shown, under the form ----
-  const SCAN_KEY = "kashshaf.lastScan";
-  const SEV = { fraud: 4, suspicious: 3, unreachable: 1, safe: 0, official: -1 };
-  let lastScan = null, lastScanKey = "";
-  try { lastScan = JSON.parse(sessionStorage.getItem(SCAN_KEY)); } catch { lastScan = null; }
-  if (!Array.isArray(lastScan?.links)) lastScan = null;
-
-  $("#scanBtn").onclick = async () => {
-    const text = $("#scanText").value.trim();
-    $("#scanMsg").textContent = "";
-    if (!text) { $("#scanMsg").textContent = "الصق رسالة أو رابطاً أولاً."; return; }
-    $("#scanBtn").disabled = true;
-    try {
-      const r = await api("/api/scan", { text });
-      lastScan = { at: r.at, text, links: r.links }; // replaces the previous check
-      lastScanKey = "";
-      try { sessionStorage.setItem(SCAN_KEY, JSON.stringify(lastScan)); } catch { /* storage off: keep it in memory */ }
-      $("#scanText").value = "";
-      renderScan();
-      await updateScan();
-    } catch (e) { $("#scanMsg").textContent = e.message; }
-    $("#scanBtn").disabled = false;
+  $("#patrolBtn").onclick = () => control("patrol", $("#heroMsg"), t("act.patrol"));
+  $("#stopBtn").onclick = () => control("stop", $("#heroMsg"), t("act.stop"));
+  $("#startBtn").onclick = () => control("start", $("#heroMsg"), t("act.start"));
+  $("#stopBtn2").onclick = () => control("stop", $("#agentsMsg"), t("act.stop"));
+  $("#startBtn2").onclick = () => control("start", $("#agentsMsg"), t("act.start"));
+  $("#resizeBtn").onclick = async () => {
+    const n = Math.max(1, Math.min(500, +$("#agentCount").value || 50));
+    try { await api("/api/agents", { count: n }); $("#agentsMsg").textContent = t("act.resized", { n }); } catch (e) { $("#agentsMsg").textContent = e.message; }
+    refreshState();
   };
 
-  async function updateScan() {
-    const scan = lastScan;
-    if (!scan?.links.length) return renderScan();
-    const items = await api(`/api/scan_result?ids=${scan.links.map((l) => l.url_id).join(",")}`);
-    if (scan !== lastScan) return; // a newer check replaced this one while we waited: drop the old answer
-    const key = JSON.stringify(items);
-    if (key === lastScanKey) return; // nothing changed: leave the page as it is
-    lastScanKey = key; lastScan.items = items; renderScan();
-    try { sessionStorage.setItem(SCAN_KEY, JSON.stringify(lastScan)); } catch { /* storage off: keep it in memory */ }
+  /* ---------------- charts ---------------- */
+  let charts = {}, insights = null, gangCount = 0;
+  const baseFont = () => ({ family: getComputedStyle(document.body).fontFamily, size: 12 });
+  function chartDefaults() {
+    Chart.defaults.font = baseFont(); Chart.defaults.color = "#667085";
+    Chart.defaults.plugins.legend.rtl = rtl(); Chart.defaults.plugins.tooltip.rtl = rtl();
+    Chart.defaults.plugins.legend.labels.usePointStyle = true; Chart.defaults.plugins.legend.labels.boxWidth = 8;
+    Chart.defaults.plugins.tooltip.backgroundColor = "#082E6D"; Chart.defaults.plugins.tooltip.padding = 10; Chart.defaults.plugins.tooltip.cornerRadius = 8;
+  }
+  const grid = { color: "#eef1f5" }, axis = { color: "#d0d5dd" };
+  function upsert(id, make, update) {
+    const el = document.getElementById(id); if (!el) return;
+    if (charts[id]) { update(charts[id]); charts[id].update(); return; }
+    chartDefaults(); charts[id] = new Chart(el, make());
+  }
+  function activityChart(id) {
+    const tl = insights.timeline, labels = tl.map((h) => new Date(h.hour).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }));
+    const sets = () => VCLASS.map((v) => ({ label: t("v." + v), data: tl.map((h) => h[v] || 0), backgroundColor: VCOLOR[v], borderColor: "#fff", borderWidth: 1, borderRadius: 4, borderSkipped: false, stack: "s" }));
+    upsert(id, () => ({ type: "bar", data: { labels, datasets: sets() }, options: { responsive: true, maintainAspectRatio: false, animation: { duration: 900 },
+      plugins: { legend: { position: "bottom" } }, interaction: { mode: "index", intersect: false },
+      scales: { x: { stacked: true, grid: { display: false }, border: axis, reverse: rtl(), ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { stacked: true, beginAtZero: true, grid, border: { display: false }, position: rtl() ? "right" : "left", ticks: { precision: 0 } } } } }),
+    (c) => { c.data.labels = labels; c.data.datasets.forEach((d, i) => (d.data = sets()[i].data)); });
+  }
+  const tableHtml = (rows) => `<table class="table"><tbody>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num">${v}</td></tr>`).join("")}</tbody></table>`;
+  function analyticsCharts() {
+    const I = insights, vs = VCLASS.map((v) => I.verdicts[v] || 0);
+    const vl = VCLASS.map((v, i) => `${t("v." + v)} · ${vs[i]}`); // the legend names each slice and its value
+    upsert("chVerdicts", () => ({ type: "doughnut", data: { labels: vl, datasets: [{ data: vs, backgroundColor: VCLASS.map((v) => VCOLOR[v]), borderColor: "#fff", borderWidth: 2, hoverOffset: 8 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: "66%", plugins: { legend: { position: rtl() ? "left" : "right" } }, animation: { animateRotate: true, duration: 1000 } } }),
+    (c) => { c.data.labels = vl; c.data.datasets[0].data = vs; });
+    $("#tblVerdicts").innerHTML = tableHtml(VCLASS.map((v, i) => [t("v." + v), vs[i]]));
+    const fv = [I.found.agents, I.found.people];
+    const hbar = (labels, data, colors) => ({ type: "bar", data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false, barThickness: 22, maxBarThickness: 26 }] },
+      options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, animation: { duration: 900 }, plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, reverse: rtl(), grid, border: { display: false }, ticks: { precision: 0 } }, y: { position: rtl() ? "right" : "left", grid: { display: false }, border: axis } } } });
+    upsert("chFirst", () => hbar([t("chart.found.agents"), t("chart.found.people")], fv, ["#2a78d6", "#1baf7a"]), (c) => { c.data.datasets[0].data = fv; });
+    $("#tblFirst").innerHTML = tableHtml([[t("chart.found.agents"), fv[0]], [t("chart.found.people"), fv[1]]]);
+    const en = I.entities.map((e) => (lang === "en" ? e.en : e.ar)), ev = I.entities.map((e) => e.count);
+    upsert("chEntities", () => hbar(en, ev, "#135BA6"), (c) => { c.data.labels = en; c.data.datasets[0].data = ev; });
+    $("#tblEntities").innerHTML = tableHtml(I.entities.map((e, i) => [en[i], e.count]));
+    const sk = Object.keys(I.sources).sort((a, b) => I.sources[b] - I.sources[a]), sl = sk.map((k) => t("src." + k)), sv = sk.map((k) => I.sources[k]);
+    upsert("chSources", () => hbar(sl, sv, "#2a78d6"), (c) => { c.data.labels = sl; c.data.datasets[0].data = sv; });
+    $("#tblSources").innerHTML = tableHtml(sk.map((k, i) => [sl[i], sv[i]]));
+    activityChart("chActivity");
+  }
+  // KPI tile. The number counts up; the tile is rebuilt only when its text changes, so the animation runs from the old value.
+  const kpi = (ic, value, label, desc, cls = "", sfx = "") => ({ value, html: `<div class="kpi ${cls}"><span class="ic">${icon(ic)}</span><b data-suffix="${sfx}">0${sfx}</b><span>${esc(label)}</span>${desc ? `<small>${esc(desc)}</small>` : ""}${cls === "feature" ? '<div class="bar"><i></i></div>' : ""}</div>` });
+  function fillKpis(el, tiles) {
+    const key = tiles.map((k) => k.html).join("");
+    if (el.dataset.key !== key) { el.innerHTML = key; el.dataset.key = key; }
+    $$(".kpi", el).forEach((tile, i) => { countTo($("b", tile), tiles[i].value); const bar = $(".bar i", tile); if (bar) bar.style.width = `${tiles[i].value}%`; });
+  }
+  function opsKpis() {
+    const f = insights.found, total = f.agents + f.people, pct = total ? Math.round((100 * f.agents) / total) : 0;
+    fillKpis($("#opsKpis"), [kpi("radar", pct, t("kpi.first"), t("kpi.first.d"), "feature", "%"),
+      kpi("block", st?.stats.blocked ?? 0, t("kpi.blocked"), t("kpi.blocked.d"), "danger"),
+      kpi("eye", st?.stats.cloaked ?? insights.cloaked, t("kpi.cloaked"), t("kpi.cloaked.d")),
+      kpi("link", gangCount, t("kpi.gangs"), t("kpi.gangs.d"))]);
   }
 
-  function renderScan() {
-    const box = $("#scanResult");
-    box.hidden = !lastScan;
-    if (!lastScan) return;
-    const fromDb = new Set(lastScan.links.filter((l) => l.from_db).map((l) => l.url_id));
-    const at = (x) => (x.result?.created_at ? Date.parse(x.result.created_at) : 0);
-    const items = [...(lastScan.items || lastScan.links.map((l) => ({ ...l, pending: true, status: "queued" })))]
-      .sort((a, b) => b.pending - a.pending || (sort === "risk"
-        ? (SEV[b.result?.verdict] ?? -2) - (SEV[a.result?.verdict] ?? -2) || (b.result?.score ?? 0) - (a.result?.score ?? 0)
-        : sort === "old" ? at(a) - at(b) : at(b) - at(a)));
-    const done = items.filter((x) => !x.pending && x.result).map((x) => x.result.verdict);
-    const worst = done.sort((a, b) => SEV[b] - SEV[a])[0];
-    const waiting = items.some((x) => x.pending);
-
-    let overall;
-    if (!items.length) overall = ["none", "لا توجد روابط في هذا النص لفحصها."];
-    else if (worst === "fraud") overall = ["v-fraud", "احتيال: في الرسالة رابط احتيال. لا تفتحه ولا تُدخل أي بيانات."];
-    else if (waiting) overall = ["pending", "جارٍ الفحص… تظهر النتيجة هنا خلال ثوانٍ، وتحقيق وكيل Claude قد يأخذ دقيقة."];
-    else if (worst === "suspicious") overall = ["v-suspicious", "مشبوه: راجع الرابط قبل فتحه، ولا تُدخل أي بيانات."];
-    else if (worst === "unreachable") overall = ["v-unreachable", "تعذّر فتح الرابط، ربما توقف الموقع."];
-    else if (done.length && done.every((v) => v === "official")) overall = ["v-official", "رابط رسمي لجهة حكومية مسجّلة."];
-    else overall = ["v-safe", "لم يُعثر على احتيال في روابط الرسالة."];
-
-    const by = (v) => v.model === "database" ? "قاعدة البيانات" : v.model === "rules" ? "القواعد"
-      : v.model ? "وكيل Claude" : v.verdict === "official" ? "السجل الرسمي" : "";
-    // an official site belongs to the entity; only fraud and suspicious sites impersonate it
-    const entity = (v) => !v.entity_ar ? "" : v.verdict === "official" ? `الموقع الرسمي لـ${esc(v.entity_ar)} · `
-      : ["fraud", "suspicious"].includes(v.verdict) ? `ينتحل: ${esc(v.entity_ar)} · ` : `الجهة المذكورة: ${esc(v.entity_ar)} · `;
-    const link = (x) => {
-      if (x.pending) return `<div class="scan-link pending"><div class="scan-link-head"><span class="spin" aria-hidden="true"></span>
-          <b>${x.status === "checking" ? `يفحصه الآن ${esc((x.agent || "").split("@")[0])}` : "في انتظار وكيل"}</b></div>
-          <span class="url">${esc(x.url)}</span></div>`;
-      const v = x.result;
-      if (!v) return `<div class="scan-link"><div class="scan-link-head">${pill("unreachable")}</div>
-          <span class="url">${esc(x.url)}</span><p class="muted">تعذّر فحص الرابط.</p></div>`;
-      return `<div class="scan-link ${esc(v.verdict)}">
-          <div class="scan-link-head">${pill(v.verdict)}<b class="score">${v.score}/100</b>
-            ${v.blocked ? '<span class="blocked">محظور</span>' : ""}${v.cloaked ? '<span class="tag">إخفاء</span>' : ""}
-            ${fromDb.has(x.url_id) ? '<span class="tag">فُحص سابقاً، من قاعدة البيانات</span>' : ""}</div>
-          <span class="url">${esc(x.url)}</span>
-          <p class="muted">${entity(v)}وقت الحكم ${time(v.created_at)}${by(v) ? ` · بواسطة ${by(v)}` : ""}</p>
-          ${v.ai?.summary_ar ? `<div class="ai-box"><b>تحليل الوكيل:</b> ${esc(v.ai.summary_ar)}</div>` : ""}
-          ${(v.reasons || []).length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(r.ar)}</li>`).join("")}</ul>` : ""}
-          <div class="row-actions"><button class="btn btn-sm" data-open="${x.url_id}">التفاصيل والأدلة</button>
-            ${v.blocked ? `<a class="btn btn-sm" href="/blocked?url=${encodeURIComponent(x.url)}" target="_blank" rel="noopener">صفحة التحذير</a>` : ""}</div>
-        </div>`;
-    };
-
-    const text = lastScan.text || "";
-    box.className = `panel scan-result ${waiting && worst !== "fraud" ? "pending" : worst || "none"}`;
-    box.innerHTML = `<div class="scan-result-head"><h2>نتيجة الفحص</h2>
-        <span class="muted">${time(lastScan.at)} · ${items.length} رابط</span></div>
-      <p class="scan-text" dir="auto">${esc(text.length > 240 ? `${text.slice(0, 240)}…` : text)}</p>
-      <div class="scan-overall ${overall[0]}">${overall[1]}</div>
-      ${items.map(link).join("")}`;
+  /* ---------------- radar + feed ---------------- */
+  const hash = (s) => { let h = 2166136261; for (const ch of s) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
+  let seenBlips = new Set(), lastFeed = new Set();
+  function radar(rows) {
+    const band = { fraud: [20, 28], suspicious: [30, 36], official: [38, 44], safe: [38, 44], unreachable: [38, 44] };
+    $("#blips").innerHTML = rows.slice(0, 40).map((f) => {
+      const h = hash(f.domain || f.url), a = ((h % 360) * Math.PI) / 180, [r0, r1] = band[f.verdict] || [38, 44], r = r0 + ((h >>> 9) % 100) / 100 * (r1 - r0);
+      const isNew = !seenBlips.has(f.url_id) && seenBlips.size > 0;
+      return `<button type="button" class="blip ${esc(f.verdict)}${isNew ? " new" : ""}" style="left:${50 + r * Math.cos(a)}%;top:${50 + r * Math.sin(a)}%" data-open="${f.url_id}" title="${esc(t("v." + f.verdict))} · ${esc(f.domain)}" aria-label="${esc(t("v." + f.verdict))} ${esc(f.domain)}"></button>`;
+    }).join("");
+    rows.forEach((f) => seenBlips.add(f.url_id));
   }
-  renderScan();
+  function feed(rows) {
+    const first = lastFeed.size === 0;
+    $("#feed").innerHTML = rows.slice(0, 12).map((f) => `<li class="${!first && !lastFeed.has(f.verdict_id) ? "new" : ""}" data-open="${f.url_id}">
+      ${pill(f.verdict)}<span class="d" title="${esc(f.url)}">${esc(f.domain)}</span><span class="s">${f.score}</span>
+      <span class="meta">${ent(f) ? esc(ent(f)) + " · " : ""}${f.agent ? esc(f.agent.split("@")[0]) + " · " : ""}${time(f.created_at)}</span></li>`).join("") || `<li>${t("none")}</li>`;
+    rows.forEach((f) => lastFeed.add(f.verdict_id));
+  }
 
-  // ---- actions -----------------------------------------------------------
-  $("#googleBtn").onclick = async () => {
-    const query = $("#googleQuery").value.trim();
-    if (!query) return;
-    await googleSearch(query, false);
-  };
-  async function googleSearch(query, force) {
-    const msg = $("#discoverMsg");
+  /* ---------------- pages ---------------- */
+  let pageBusy = false;
+  async function loadPage(poll = false) {
+    if (!session || (poll && pageBusy)) return; // a poll waits for the previous load; a page change always loads
+    const p = page;
+    pageBusy = true;
     try {
-      const r = await api("/api/discover", { kind: "google", query, hl: $("#googleLang").value, force });
-      if (r.cached) {
-        msg.dataset.keep = "1";
-        msg.innerHTML = `هذا البحث تم ${time(r.searched_at)} ووجد ${r.new} رابط جديد و${r.known} موجود مسبقاً (${r.known_blocked} محظور). `
-          + `لم يُصرف بحث جديد. <button class="link" id="forceSearch">ابحث مرة ثانية على أي حال</button>`;
-        $("#forceSearch").onclick = () => { delete msg.dataset.keep; googleSearch(query, true); };
-      } else { delete msg.dataset.keep; msg.textContent = "بدأ البحث، ستظهر الروابط في النتائج."; }
-    } catch (e) { delete msg.dataset.keep; msg.textContent = e.message; }
+      if (p === "ops") {
+        const [recent, ins, gangs] = await Promise.all([api("/api/findings?limit=40&sort=new"), api("/api/insights"), api("/api/gangs")]);
+        if (p !== page) return;
+        insights = ins; gangCount = gangs.length; radar(recent); feed(recent); opsKpis(); activityChart("chActivityOps");
+      }
+      if (p === "analytics") {
+        const ins = await api("/api/insights"); if (p !== page) return; insights = ins;
+        const s = st?.stats || {};
+        fillKpis($("#anKpis"), [kpi("list", ins.total, t("kpi.urls")), kpi("alert", ins.verdicts.fraud || 0, t("kpi.fraud"), "", "danger"),
+          kpi("block", s.blocked ?? 0, t("kpi.blocked"), "", "danger"), kpi("hand", ins.protected_clicks, t("kpi.protected"), t("kpi.protected.d"), "good")]);
+        analyticsCharts();
+      }
+      if (p === "findings" && !(poll && document.activeElement === $("#search"))) await loadFindings();
+      if (p === "blocked") await loadBlocked();
+      if (p === "gangs") await loadGangs();
+      if (p === "discover") { renderDiscoverState(); await loadSearchLog(); }
+      if (p === "agents") renderAgents();
+      if (p === "org") renderOrg();
+      if (p === "live") renderLive();
+      if (p === "settings" && !poll) await loadSettings();
+      if (p === "audit") await loadAudit();
+      if (p === "scan") await updateScan();
+    } catch (e) { console.warn(e); } finally { pageBusy = false; }
+    paintIcons();
   }
 
-  // ---- blocked list --------------------------------------------------------
+  // findings
+  const findingRow = (f) => `<tr>
+    <td>${pill(f.verdict)}<div class="sub num">${f.score}/100</div><div class="scorebar"><i style="width:${f.score}%"></i></div>${f.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}</td>
+    <td>${time(f.created_at)}</td>
+    <td><span class="url">${esc(f.url)}</span><div class="sub">${esc(f.title || "")}</div></td>
+    <td>${esc(ent(f) || "—")}</td>
+    <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div></td>
+    <td>${f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("manual")}</div>` : ""}</td>
+    <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
+  async function loadFindings() {
+    const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort });
+    const rows = await api(`/api/findings?${q}`);
+    $("#findingsBody").innerHTML = rows.map(findingRow).join("") || `<tr><td colspan="7" class="empty">${t("noResults")}</td></tr>`;
+  }
+  let ft; $("#search").addEventListener("input", () => { clearTimeout(ft); ft = setTimeout(loadFindings, 300); });
+  $("#verdictFilter").onchange = loadFindings;
+
+  // blocked
   let blockedRows = [];
+  async function loadBlocked() { blockedRows = await api(`/api/blocked?sort=${sort}`); renderBlocked(); }
   function renderBlocked() {
     const q = $("#blockedSearch").value.trim().toLowerCase();
-    const rows = blockedRows.filter((b) => !q || b.domain.includes(q) || (b.entity_ar || "").includes(q));
-    $("#blockedCount").textContent = `· ${blockedRows.length}`;
-    $("#blockedBody").innerHTML = rows.map((b) => `<tr><td class="nowrap">${time(b.blocked_at)}</td>
-      <td><span class="url">${esc(b.domain)}</span></td><td>${esc(b.entity_ar || "—")}</td><td>${b.score}/100</td>
-      <td>${b.links}</td><td>${b.sightings}</td><td class="nowrap">${time(b.first_seen)}</td><td class="nowrap">${time(b.last_seen) || "—"}</td>
-      <td>${b.override === "block" ? `يدوي${b.override_by ? `<div class="muted">${esc(b.override_by)}</div>` : ""}` : "تلقائي"}</td></tr>`).join("")
-      || '<tr><td colspan="9" class="empty">لا توجد مواقع محظورة.</td></tr>';
+    const rows = blockedRows.filter((b) => !q || b.domain.includes(q) || (b.entity_ar || "").includes(q) || (b.entity_en || "").toLowerCase().includes(q));
+    $("#blockedBody").innerHTML = rows.map((b) => `<tr><td>${time(b.blocked_at)}</td><td><span class="url">${esc(b.domain)}</span></td><td>${esc(ent(b) || "—")}</td>
+      <td class="num">${b.score}/100<div class="scorebar"><i style="width:${b.score}%"></i></div></td><td class="num">${b.links}</td><td class="num">${b.sightings}</td>
+      <td>${time(b.first_seen)}</td><td>${time(b.last_seen) || "—"}</td><td>${b.override === "block" ? `${t("manual")}<div class="sub">${esc(b.override_by || "")}</div>` : t("auto")}</td></tr>`).join("")
+      || `<tr><td colspan="9" class="empty">${t("blocked.none")}</td></tr>`;
   }
   $("#blockedSearch").addEventListener("input", renderBlocked);
   $("#exportBtn").onclick = () => {
     const cols = ["domain", "entity_en", "score", "blocked_at", "first_seen", "last_seen", "links", "sightings", "override"];
     const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const csv = [cols.join(","), ...blockedRows.map((b) => cols.map((c) => cell(b[c])).join(","))].join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
-    a.download = `kashshaf-blocked-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click(); URL.revokeObjectURL(a.href);
+    a.href = URL.createObjectURL(new Blob(["﻿" + [cols.join(","), ...blockedRows.map((b) => cols.map((c) => cell(b[c])).join(","))].join("\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `kashshaf-blocked-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
   };
 
-  document.querySelectorAll("[data-discover]").forEach((b) => (b.onclick = async () => {
-    try { await api("/api/discover", { kind: b.dataset.discover }); $("#discoverMsg").textContent = "بدأ التشغيل."; }
-    catch (e) { $("#discoverMsg").textContent = e.message; }
+  // gangs
+  async function loadGangs() {
+    const gangs = await api(`/api/gangs?sort=${sort}`);
+    $("#gangsList").innerHTML = gangs.map((g, i) => {
+      const n = g.domains.length, R = 62, nodes = g.domains.slice(0, 8).map((d, j) => { const a = (j / Math.min(n, 8)) * Math.PI * 2 - Math.PI / 2; return { d, x: 170 + R * 2 * Math.cos(a), y: 85 + R * Math.sin(a) }; });
+      return `<div class="card"><div class="card-head"><div><h3>${t("gang", { n: i + 1 })} · ${t("gang.sites", { n })}</h3><p>${t("gang.first")} ${time(g.first_seen)} · ${t("gang.last")} ${time(g.last_seen)}</p></div><span class="pill v-fraud">${n}</span></div>
+        <svg class="gang-graph" viewBox="0 0 340 170" role="img" aria-label="${esc(t("gang", { n: i + 1 }))}">${nodes.map((p) => `<line x1="170" y1="85" x2="${p.x}" y2="${p.y}"/>`).join("")}
+          <circle cx="170" cy="85" r="16" fill="#d03b3b"/><text x="170" y="89" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">${g.indicators.length}</text>
+          ${nodes.map((p) => `<g><rect x="${p.x - 58}" y="${p.y - 11}" width="116" height="22" rx="11" fill="#fff" stroke="#082E6D"/><text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-size="9.5" font-family="Consolas, monospace" fill="#101828">${esc(p.d.split(".")[0].slice(0, 18))}</text></g>`).join("")}</svg>
+        <div>${g.domains.map((d) => `<span class="tag u">${esc(d)}</span>`).join("")}</div><div>${g.indicators.map((x) => `<span class="tag red u">${esc(x)}</span>`).join("")}</div></div>`;
+    }).join("") || `<div class="card empty">${t("gangs.none")}</div>`;
+  }
+
+  // discovery
+  function renderDiscoverState() {
+    if (!st) return;
+    const c = st.control, run = st.discovery.running, l = st.discovery.last, box = $("#searchRun"), searching = !!run || c.patrol;
+    box.classList.toggle("active", searching);
+    box.innerHTML = `${searching ? '<span class="spin"></span>' : icon("globe")}<span class="grow">${run ? t("disc.state.run", { k: t("kind." + run) }) : c.patrol ? t("disc.state.patrol") : t("disc.state.none")}
+      ${l ? `<div class="muted">${l.error ? esc(t("disc.lastErr", { e: l.error })) : esc(t("disc.last", { k: t("kind." + l.kind), n: l.queued }))} · ${time(l.at)}</div>` : ""}</span>
+      ${searching ? `<button class="btn danger sm" id="stopSearchBtn" type="button">${icon("stop")}${t("disc.stop")}</button>` : ""}`;
+    const sb2 = $("#stopSearchBtn"); if (sb2) sb2.onclick = async () => { await api("/api/control", { action: "stop_search" }); $("#discoverMsg").textContent = t("disc.stopped"); refreshState(); };
+  }
+  async function loadSearchLog() {
+    const log = await api(`/api/searches?sort=${sort}`);
+    $("#searchLogBody").innerHTML = log.map((x) => `<tr><td>${time(x.searched_at)}</td><td><span class="tag">${t(x.purpose === "agent" ? "kind.agent" : "kind.resident")}</span>${x.maps ? `<span class="tag">${t("maps")}</span>` : ""}</td>
+      <td dir="auto">${esc(x.query)}</td><td class="num">${x.purpose === "agent" ? "—" : x.new_links}</td><td class="num">${x.purpose === "agent" ? "—" : x.known_links}</td>
+      <td>${x.purpose === "agent" ? "—" : (x.blocked_now ?? x.known_blocked) ? `<span class="blocked">${x.blocked_now ?? x.known_blocked}</span>` : 0}</td><td>${esc(x.searched_by || "")}</td></tr>`).join("")
+      || `<tr><td colspan="7" class="empty">${t("none")}</td></tr>`;
+  }
+  async function googleSearch(query, force) {
+    const msg = $("#discoverMsg");
+    try {
+      const r = await api("/api/discover", { kind: "google", query, hl: $("#googleLang").value, force });
+      if (r.cached) {
+        msg.innerHTML = `${esc(t("disc.cached", { t: new Date(r.searched_at).toLocaleString("en-GB"), n: r.new, k: r.known, b: r.known_blocked }))} <button class="btn outline sm" id="forceSearch" type="button">${t("disc.force")}</button>`;
+        $("#forceSearch").onclick = () => googleSearch(query, true);
+      } else msg.textContent = t("disc.searching");
+    } catch (e) { msg.textContent = e.message; }
+  }
+  $("#googleBtn").onclick = () => { const q = $("#googleQuery").value.trim(); if (q) googleSearch(q, false); };
+  $$("[data-discover]").forEach((b) => (b.onclick = async () => {
+    try { await api("/api/discover", { kind: b.dataset.discover }); $("#discoverMsg").textContent = t("disc.started"); } catch (e) { $("#discoverMsg").textContent = e.message; }
+    refreshState();
   }));
-  $("#stopSearchBtn").onclick = async () => {
-    $("#stopSearchBtn").disabled = true;
-    try { await api("/api/control", { action: "stop_search" }); $("#discoverMsg").textContent = "تم إيقاف البحث. الوكلاء يكملون فحص الروابط التي وُجدت."; }
-    catch (e) { $("#discoverMsg").textContent = e.message; }
-    $("#stopSearchBtn").disabled = false; refresh();
-  };
-  function resort() {
-    renderScan();
-    if (tab === "agents" && lastState) renderAgents(lastState.agents);
-    if (session) loadList();
-  }
-  $("#sortOrder").value = sort;
-  $("#sortOrder").addEventListener("change", () => {
-    sort = $("#sortOrder").value;
-    try { localStorage.setItem(SORT_KEY, sort); } catch { /* keep it for this page only */ }
-    resort();
-  });
-  window.addEventListener("storage", (e) => { // changed in the operations room in another tab
-    if (e.key === SORT_KEY && SORT_LABEL[e.newValue]) { sort = e.newValue; $("#sortOrder").value = sort; resort(); }
-  });
-  $("#stopBtn").onclick = () => api("/api/control", { action: "stop" }).then(refresh);
-  $("#startBtn").onclick = () => api("/api/control", { action: "start" }).then(refresh);
-  $("#resizeBtn").onclick = () => api("/api/agents", { count: +$("#agentCount").value }).then(refresh);
-  $("#search").addEventListener("input", () => loadList());
-  $("#verdictFilter").addEventListener("change", () => loadList());
 
-  // ---- detail dialog -----------------------------------------------------
-  document.addEventListener("click", async (e) => {
-    const b = e.target.closest("[data-open]");
-    if (b) openDetail(+b.dataset.open);
-  });
-  async function openDetail(id) {
-    const d = await api(`/api/finding?id=${id}`);
-    const v = d.verdicts[0] || {}, s = d.scans[0] || {};
-    const domain = d.url.domain;
-    const pv = s.phone_view || {}, bv = s.bot_view || {};
-    $("#detailBody").innerHTML = `
-      <div class="detail-head"><div>${pill(v.verdict)} <span class="url">${esc(d.url.url)}</span></div>
-        <button class="btn btn-sm" id="closeDetail">إغلاق</button></div>
-      <div class="detail-body">
-        <p class="muted">الدرجة ${v.score}/100 · ${esc(v.model || "")} · وقت الحكم ${time(v.created_at)} · ${esc(s.agent || "")}
-          · أول ظهور للرابط ${time(d.url.first_seen)}
-          ${s.domain_created ? ` · تاريخ تسجيل النطاق ${esc(s.domain_created)}` : ""}</p>
-        ${v.ai ? `<div class="ai-box"><b>تحليل الوكيل:</b> ${esc(v.ai.summary_ar)}<span class="muted" dir="ltr" style="display:block">${esc(v.ai.summary_en)}</span></div>` : ""}
-        <h3>الأسباب</h3>
-        <ul class="reasons">${(v.reasons || []).map((r) => `<li>${esc(r.ar)}<span class="en">${esc(r.en)}${r.points ? ` (+${r.points})` : ""}</span></li>`).join("")}</ul>
-        <h3>ما يراه الهاتف مقابل ما تراه أداة الفحص ${s.cloaked ? '<span class="pill v-fraud">إخفاء</span>' : ""}</h3>
-        <div class="views">
-          <div class="view"><h4>هاتف في الإمارات</h4><b>${esc(pv.title || "")}</b><p dir="auto">${esc((pv.text || pv.error || "").slice(0, 1200))}</p></div>
-          <div class="view"><h4>أداة فحص</h4><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div>
-        </div>
-        <h3>البصمات</h3>
-        <div>${d.fingerprints.map((f) => `<span class="tag">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || '<span class="muted">لا يوجد</span>'}</div>
-        <h3>أين ظهر</h3>
-        <div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${SOURCE[x.source] || esc(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · الترتيب ${x.position}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
-        <div class="row-actions">
-          <button class="btn btn-danger" data-override="block">حظر النطاق</button>
-          <button class="btn" data-override="allow">سماح</button>
-          <button class="btn" data-override="">إلغاء القرار اليدوي</button>
-          <button class="btn" id="rescan">إعادة الفحص</button>
-          <a class="btn" href="/blocked?url=${encodeURIComponent(d.url.url)}" target="_blank" rel="noopener">صفحة التحذير</a>
-        </div>
+  // agent company
+  const DICON = { chief: "shield", discovery: "radar", intake: "queue", web: "scan", content: "eye", fingerprints: "fp", domain: "globe", ai: "bolt" };
+  const agentState = (a) => (!st.control.running && a.dept !== "chief" ? "paused" : (hitUntil.get(a.name) || 0) > Date.now() ? "hit" : a.status === "working" ? "working" : "idle");
+  const short = (a) => a.id.split("-").pop().replace("lead", "★");
+  function renderDeptSum() {
+    const o = st.org; if (!o || !$("#deptSum")) return;
+    const row = (id, busy, size, waiting) => `<a class="dsum" href="#org">${icon(DICON[id])}<span class="n">${esc(t("dept." + id))}</span>
+      <span class="b"><i style="width:${size ? (100 * busy) / size : 0}%"></i></span><span class="c num">${busy}/${size}</span>${waiting ? `<em>${esc(t("org.waiting", { n: waiting }))}</em>` : ""}</a>`;
+    $("#deptSum").innerHTML = row("chief", o.chief.status === "working" ? 1 : 0, 1, 0) + o.departments.map((d) => row(d.id, d.busy, d.size - 1, d.waiting)).join(""); // members only; the leader assigns
+  }
+  function avatar(a, cls = "") {
+    const s = agentState(a);
+    return `<span class="av ${s} ${a.role} ${cls}" title="${esc(a.name)} · ${esc(t("role." + a.role))} · ${esc(t("agents." + s))}${a.job ? "\n" + esc(a.job) : ""}">${a.role === "leader" ? icon("crown") : esc(short(a))}</span>`;
+  }
+  function renderOrg() {
+    const o = st?.org; if (!o) return;
+    const all = st.agents, working = all.filter((a) => a.status === "working").length, open = o.cases.filter((c) => !c.finished).length;
+    fillKpis($("#orgKpis"), [kpi("users", o.total, t("org.total"), t("org.min", { n: o.min_total })), kpi("org", o.departments.length, t("org.deptCount")),
+      kpi("bolt", working, t("org.working"), "", working ? "good" : ""), kpi("queue", open, t("org.open"))]);
+    const c = o.chief;
+    $("#chiefCard").innerHTML = `<div class="chief-av ${agentState(c)}">${icon("shield")}</div>
+      <div class="chief-txt"><span class="role-tag">${esc(t("role.chief"))}</span><h3>${esc(t("dept.chief"))} <span class="u">${esc(c.id)}</span></h3><p>${esc(t("dept.chief.d"))}</p>
+      <div class="chief-stats"><span>${icon("target")}${esc(t("org.decisions", { n: c.done, h: c.hits }))}</span>${c.job ? `<span class="u">${esc(c.job)}</span>` : ""}</div></div>`;
+    $("#depts").innerHTML = o.departments.map((d) => {
+      const busy = d.members.filter((m) => m.status === "working");
+      return `<div class="dept ${d.busy ? "active" : ""}">
+        <div class="dept-head"><span class="dept-ic">${icon(DICON[d.id])}</span><div><h3>${esc(t("dept." + d.id))}</h3><p>${esc(t("dept." + d.id + ".d"))}</p></div></div>
+        <div class="dept-stats"><span class="pill-soft">${esc(t("org.busy", { b: d.busy, n: d.size - 1 }))}</span>${d.waiting ? `<span class="pill-soft warn">${esc(t("org.waiting", { n: d.waiting }))}</span>` : ""}<span class="pill-soft muted2">${esc(t("org.done", { n: d.done }))}</span></div>
+        <div class="leader">${avatar(d.leader, "lg")}<div><b>${esc(d.leader.id)}</b><small>${esc(t("role.leader"))} · ${esc(t("org.assigned", { n: d.leader.done }))}</small></div></div>
+        <div class="members">${d.members.map((m) => avatar(m)).join("")}</div>
+        <div class="now">${busy.slice(0, 3).map((m) => `<div>${avatar(m, "xs")}<span class="u">${esc(m.job || "")}</span></div>`).join("") || `<span class="muted">${esc(t("org.idleAll"))}</span>`}</div>
       </div>`;
-    $("#closeDetail").onclick = () => $("#detail").close();
-    $("#rescan").onclick = () => api("/api/rescan", { url: d.url.url }).then(() => $("#detail").close());
-    document.querySelectorAll("[data-override]").forEach((b) => (b.onclick = async () => {
-      await api("/api/override", { domain, action: b.dataset.override || null });
-      $("#detail").close(); refresh();
-    }));
-    $("#detail").showModal();
+    }).join("");
+    $("#cases").innerHTML = o.cases.map((cs) => `<div class="case ${cs.finished ? "" : "open"}" data-open="${cs.url_id}">
+      <div class="case-top"><span class="u">${esc(cs.domain)}</span>${cs.verdict ? pill(cs.verdict) : `<span class="pill-soft"><span class="spin"></span> ${esc(t("org.inprogress"))}</span>`}</div>
+      <ol class="track">${o.stages.map((sg) => { const who = cs.stages[sg], cur = cs.current === sg, skip = (cs.skipped || []).includes(sg);
+        return `<li class="${cur ? "cur" : who ? "done" : skip ? "skip" : ""}" title="${esc(t("stage." + sg))}${who ? " · " + esc(who.split("@")[0]) : skip ? " · " + esc(t("org.skipped")) : ""}">${icon(DICON[sg === "chief" ? "chief" : sg])}<small>${esc(t("stage." + sg))}</small></li>`; }).join("")}</ol></div>`).join("")
+      || `<p class="muted">${esc(t("org.none"))}</p>`;
   }
 
-  $("#tourBtn").addEventListener("click", () => window.KashshafTour?.start());
+  // live view: one big room, a desk per agent; a bubble shows what each agent just found (org.report on the server)
+  const LOOKS = [{ skin: "tan", uni: "admin", beard: "short" }, { skin: "medium", uni: "field", beard: false }, { skin: "dark", uni: "admin" },
+    { skin: "light", uni: "field", beard: "short", hair: "brown" }, { skin: "medium", uni: "admin", hair: "grey" }, { skin: "tan", uni: "field" }];
+  const look = (a) => LOOKS[hash(a.id) % LOOKS.length];
+  const hostOf = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u || ""; } };
+  let floorKey = "";
+  const deskHTML = (a, cls = "") => `<div class="desk ${cls}" data-name="${esc(a.name)}">
+      <div class="bubble" role="status"></div>
+      <div class="mon"><div class="scr d-${esc(a.dept)}"><span class="glyph">${icon(DICON[a.dept] || "shield")}</span><i></i><i></i><i></i><i></i><span class="job"></span><span class="off"></span></div></div>
+      <div class="tbl"></div>
+      <div class="person"><img src="${window.KChars ? KChars.image("officer", look(a), "up", 0).src : ""}" alt=""></div>
+      <span class="dtag">${a.role === "leader" ? icon("crown") : ""}${esc(a.id)}</span></div>`;
+  function renderLive() {
+    const o = st?.org; if (!o || !$("#floor")) return;
+    const everyone = [o.chief, ...o.departments.flatMap((d) => [d.leader, ...d.members])];
+    const key = everyone.map((a) => a.name).join("|") + lang;
+    if (key !== floorKey) {
+      floorKey = key;
+      $("#floor").innerHTML = `<div class="zone chief-zone"><div class="zone-head">${icon("shield")}<b>${esc(t("live.office"))}</b><span class="zc" data-zone="chief"></span></div><div class="desks">${deskHTML(o.chief, "big")}</div></div>`
+        + o.departments.map((d) => `<div class="zone" data-dept="${esc(d.id)}"><div class="zone-head">${icon(DICON[d.id])}<b>${esc(t("dept." + d.id))}</b><span class="zc" data-zone="${esc(d.id)}"></span></div>
+          <div class="desks">${deskHTML(d.leader, "lead")}${d.members.map((m) => deskHTML(m)).join("")}</div></div>`).join("");
+      $("#liveLegend").innerHTML = ["ok", "bad", "warn", "info"].map((l) => `<span class="lg ${l}"><i></i>${esc(t("live.l." + l))}</span>`).join("");
+    }
+    for (const a of everyone) {
+      const el = $(`.desk[data-name="${CSS.escape(a.name)}"]`); if (!el) continue;
+      const s = agentState(a);
+      for (const c of ["working", "idle", "paused", "hit"]) el.classList.toggle(c, c === s);
+      $(".job", el).textContent = s === "working" && a.job ? hostOf(a.job) : "";
+      $(".off", el).textContent = s === "paused" ? t("live.paused") : s === "idle" ? t("live.idle") : "";
+      if (!(a.last && o.now - a.last.at < 10)) el.title = `${a.name} · ${t("role." + a.role)}${a.job ? "\n" + a.job : ""}`;
+      const L = a.last, fresh = L && o.now - L.at < 10, b = $(".bubble", el), k = fresh ? String(L.at) : "";
+      if (b.dataset.k !== k) {
+        b.dataset.k = k; b.className = "bubble";
+        if (fresh) {
+          b.innerHTML = `<b>${esc(L[lang] || L.ar)}</b>${L.url ? `<small>${esc(L.url)}</small>` : ""}`;
+          el.title = `${L[lang] || L.ar}\n${L.url || ""}\n${a.name}`; // the full finding on hover
+          void b.offsetWidth; b.className = `bubble show ${L.level}`; // restart the pop animation for each new result
+        } else b.innerHTML = "";
+      }
+    }
+    $$("[data-zone]").forEach((z) => {
+      const d = o.departments.find((x) => x.id === z.dataset.zone);
+      z.innerHTML = d ? `<span class="pill-soft">${esc(t("org.busy", { b: d.busy, n: d.size - 1 }))}</span>${d.waiting ? `<span class="pill-soft warn">${esc(t("org.waiting", { n: d.waiting }))}</span>` : ""}`
+        : `<span class="pill-soft">${esc(t("org.decisions", { n: o.chief.done, h: o.chief.hits }))}</span>`;
+    });
+    const working = everyone.filter((a) => a.status === "working").length, open = o.cases.filter((c) => !c.finished).length, cl = o.chief.last;
+    $("#liveStats").innerHTML = `<span class="pill-soft"><em class="live-dot${st.control.running ? "" : " off"}"></em> ${esc(t("live.working", { n: working }))}</span>
+      <span class="pill-soft">${esc(t("live.open", { n: open }))}</span>
+      ${cl ? `<span class="pill-soft lvl-${esc(cl.level)}">${esc(t("live.last"))} ${esc(cl[lang] || cl.ar)} · <span class="u">${esc(cl.url || "")}</span></span>` : ""}`;
+  }
+
+  // settings: live status of every outside service (GET /api/integrations), one test per service on demand
+  const SVC_ICON = { peers: "users", supabase_db: "queue", supabase_auth: "users", claude: "bolt", serpapi: "search", crtsh: "cert", openphish: "fish", rdap: "globe", test_sites: "scan" };
+  let services = null, settingsCfg = null, servicesAt = 0;
+  async function loadSettings(force) {
+    if (!force && services && Date.now() - servicesAt < 60000) return renderSettings(); // checks hit outside services: at most once a minute
+    $("#setRefresh").disabled = true; $("#setSummary").innerHTML = `<span class="spin"></span> ${esc(t("set.checking"))}`;
+    try { const r = await api("/api/integrations"); services = r.services; settingsCfg = r.settings; servicesAt = Date.now(); }
+    finally { $("#setRefresh").disabled = false; }
+    renderSettings();
+  }
+  function detailRows(d) {
+    const v = (k, x) => k === "calls_hour" ? `${x}/${d.cap_hour}` : k === "last_ok" ? time(x) : k === "exhausted" ? (x ? t("yes") : t("no")) : esc(x);
+    return Object.entries(d || {}).filter(([k, x]) => x !== null && x !== undefined && k !== "cap_hour" && L.ar["sd." + k])
+      .map(([k, x]) => `<div><span>${esc(t("sd." + k))}</span><b class="${["key", "host", "endpoint", "model", "answered_by", "this_server", "others"].includes(k) ? "u" : "num"}">${v(k, x)}</b></div>`).join("");
+  }
+  function renderSettings() {
+    if (!services) return;
+    const ok = services.filter((s) => s.status === "ok").length, bad = services.filter((s) => s.status === "error").length;
+    $("#setSummary").innerHTML = `<b>${esc(t("set.summary", { c: ok, n: services.length }))}</b>
+      ${["ok", "warn", "configured", "off", "error"].map((st) => { const n = services.filter((s) => s.status === st).length; return n ? `<span class="st ${st}">${esc(t("st." + st))} · ${n}</span>` : ""; }).join("")}
+      <small class="muted">${esc(t("set.checked"))} ${time(servicesAt / 1000)}</small>`;
+    $("#navSettings").textContent = bad + services.filter((s) => s.status === "warn").length || "";
+    $("#services").innerHTML = services.map((s) => `<div class="svc ${s.status}">
+      <div class="svc-head"><span class="svc-ic">${icon(SVC_ICON[s.id] || "globe")}</span><div><h3>${esc(t("svc." + s.id))}</h3><p>${esc(t("svc." + s.id + ".d"))}</p></div>
+        <span class="st ${s.status}">${esc(t("st." + s.status))}</span></div>
+      <div class="svc-rows">${detailRows(s.detail)}${s.ms > 0 ? `<div><span>${esc(t("sd.ms"))}</span><b class="num">${s.ms} ms</b></div>` : ""}</div>
+      ${s.error ? `<div class="svc-err u">${esc(s.error)}</div>` : ""}
+      ${s.id === "claude" ? `<p class="note">${esc(t("set.claudeNote"))}</p>` : ""}${s.id === "rdap" ? `<p class="note">${esc(t("svc.rdap.note"))}</p>` : ""}${s.id === "peers" && s.status === "warn" ? `<p class="note">${esc(t("svc.peers.note"))}</p>` : ""}
+      <div class="row"><button class="btn outline sm" data-test="${esc(s.id)}" type="button"${s.status === "off" ? " disabled" : ""}>${esc(t(s.id === "claude" ? "set.testPaid" : "set.test"))}</button><span class="muted">${time(s.checked_at)}</span></div>
+    </div>`).join("");
+    $$("[data-test]").forEach((b) => (b.onclick = async () => {
+      b.disabled = true; b.innerHTML = `<span class="spin"></span> ${esc(t("set.checking"))}`;
+      try { const r = await api("/api/integrations/test", { id: b.dataset.test }); services = services.map((x) => (x.id === r.id ? r : x)); }
+      catch (e) { services = services.map((x) => (x.id === b.dataset.test ? { ...x, status: "error", error: e.message } : x)); }
+      renderSettings();
+    }));
+    const c = settingsCfg || {};
+    const val = (k, x) => typeof x === "boolean" ? t(x ? "yes" : "no") : k === "agent_base_url" ? (x ? `<span class="u">${esc(x)}</span>` : esc(t("direct"))) : x === null ? "—" : `<span class="${typeof x === "number" ? "num" : "u"}">${esc(x)}</span>`;
+    const warn = (k, x) => (k === "allow_local_test_sites" && x) ? `<span class="tag red">${esc(t("cfg.warnTest"))}</span>` : (k === "agent_base_url" && x) ? `<span class="tag">${esc(t("cfg.warnProxy"))}</span>` : "";
+    $("#configBody").innerHTML = Object.entries(c).map(([k, x]) => `<tr><td>${esc(t("cfg." + k))}</td><td>${val(k, x)} ${warn(k, x)}</td></tr>`).join("");
+    paintIcons($("#settings") || document);
+  }
+  $("#setRefresh").onclick = () => loadSettings(true).catch((e) => ($("#setSummary").textContent = e.message));
+
+  // agents page
+  function renderAgents() {
+    if (!st) return;
+    const c = st.control, s = st.stats;
+    fillKpis($("#agKpis"), [kpi("users", st.agents.length, t("nav.agents")), kpi("bolt", st.agents.filter((a) => a.status === "working").length, t("agents.working")),
+      kpi("queue", s.queued + s.checking, t("kpi.queue")), kpi("target", st.agents.reduce((n, a) => n + (a.hits || 0), 0), t("col.hits"), "", "danger")]);
+    const act = (a) => (a.status === "working" ? a.since : a.last_done) || 0, when = (a) => (a.status === "working" ? 1e12 : 0) + act(a);
+    const list = [...st.agents].sort((a, b) => !act(a) - !act(b) || (sort === "risk" ? b.hits - a.hits || b.done - a.done : sort === "old" ? when(a) - when(b) : when(b) - when(a)) || a.id - b.id);
+    $("#agentsBody").innerHTML = list.map((a) => `<tr><td>${esc(a.name)}</td><td>${esc(t("dept." + a.dept))}</td><td>${esc(t("role." + a.role))}</td><td>${!c.running || a.status === "paused" ? t("ag.paused") : a.status === "working" ? `<span class="tag" style="color:var(--blue)">${t("ag.working")}</span>` : t("ag.idle")}</td>
+      <td class="num">${a.done}</td><td>${a.hits ? `<span class="blocked">${a.hits}</span>` : 0}</td><td><span class="url">${esc(a.job || "")}</span></td><td>${time(a.since) || "—"}</td><td>${time(a.last_done) || "—"}</td></tr>`).join("");
+    paintIcons($("#agKpis"));
+  }
+
+  // audit
+  async function loadAudit() {
+    const log = await api(`/api/audit?sort=${sort}`);
+    $("#auditBody").innerHTML = log.map((l) => `<tr><td>${time(l.at)}</td><td>${esc(l.actor)}</td><td>${esc(L[lang]["a." + l.action] ? t("a." + l.action) : l.action)}</td><td><span class="url">${esc(l.target || "")}</span></td></tr>`).join("")
+      || `<tr><td colspan="4" class="empty">${t("none")}</td></tr>`;
+  }
+
+  // scan
+  const SCAN_KEY = "kashshaf.lastScan", SEV = { fraud: 4, suspicious: 3, unreachable: 1, safe: 0, official: -1 };
+  let lastScan = null, lastScanKey = "";
+  try { lastScan = JSON.parse(sessionStorage.getItem(SCAN_KEY)); } catch { lastScan = null; }
+  if (!Array.isArray(lastScan?.links)) lastScan = null;
+  $("#scanBtn").onclick = async () => {
+    const text = $("#scanText").value.trim(); $("#scanMsg").textContent = "";
+    if (!text) { $("#scanMsg").textContent = t("scan.empty"); return; }
+    $("#scanBtn").disabled = true;
+    try {
+      const r = await api("/api/scan", { text });
+      lastScan = { at: r.at, text, links: r.links }; lastScanKey = "";
+      try { sessionStorage.setItem(SCAN_KEY, JSON.stringify(lastScan)); } catch { /* memory */ }
+      $("#scanText").value = ""; renderScan(); await updateScan();
+    } catch (e) { $("#scanMsg").textContent = e.message; }
+    $("#scanBtn").disabled = false;
+  };
+  async function updateScan() {
+    const scan = lastScan; if (!scan?.links.length) return renderScan();
+    const items = await api(`/api/scan_result?ids=${scan.links.map((l) => l.url_id).join(",")}`);
+    if (scan !== lastScan) return;
+    const key = JSON.stringify(items) + lang; if (key === lastScanKey) return;
+    lastScanKey = key; lastScan.items = items; renderScan();
+  }
+  function renderScan() {
+    const box = $("#scanResult"); box.hidden = !lastScan; if (!lastScan) return;
+    const fromDb = new Set(lastScan.links.filter((l) => l.from_db).map((l) => l.url_id));
+    const items = lastScan.items || lastScan.links.map((l) => ({ ...l, pending: true, status: "queued" }));
+    const done = items.filter((x) => !x.pending && x.result).map((x) => x.result.verdict).sort((a, b) => SEV[b] - SEV[a]);
+    const waiting = items.some((x) => x.pending), worst = done[0];
+    const overall = !items.length ? ["pending", t("scan.nolinks")] : worst === "fraud" ? ["fraud", t("scan.fraud")] : waiting ? ["pending", t("scan.wait")]
+      : worst === "suspicious" ? ["warn", t("scan.susp")] : worst === "unreachable" ? ["warn", t("scan.unreach")]
+      : done.length && done.every((v) => v === "official") ? ["ok", t("scan.official")] : ["ok", t("scan.safe")];
+    const by = (v) => (v.model === "database" ? t("by.database") : v.model === "rules" ? t("by.rules") : v.model ? t("by.ai") : v.verdict === "official" ? t("by.registry") : "");
+    box.innerHTML = `<div class="card-head"><div><h3>${t("scan.result")}</h3><p>${time(lastScan.at)} · ${t("scan.links", { n: items.length })}</p></div></div>
+      <p class="muted" dir="auto">${esc((lastScan.text || "").slice(0, 240))}</p>
+      <div class="overall ${overall[0]}">${overall[0] === "pending" && waiting ? '<span class="spin"></span>' : icon(overall[0] === "fraud" ? "alert" : "shield")}${esc(overall[1])}</div>
+      ${items.map((x) => {
+        if (x.pending) return `<div class="scan-link"><div class="head"><span class="spin"></span><b>${x.status === "checking" ? esc(t("scan.checking", { a: (x.agent || "").split("@")[0] })) : t("scan.queued")}</b></div><span class="url">${esc(x.url)}</span></div>`;
+        const v = x.result || { verdict: "unreachable", score: 0, reasons: [] };
+        const e = ent(v) ? (v.verdict === "official" ? t("officialof", { e: ent(v) }) : ["fraud", "suspicious"].includes(v.verdict) ? t("impersonates", { e: ent(v) }) : ent(v)) : "";
+        return `<div class="scan-link ${esc(v.verdict)}"><div class="head">${pill(v.verdict)}<b class="num">${v.score}/100</b>${v.blocked ? `<span class="tag red">${t("blockedTag")}</span>` : ""}${v.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}${fromDb.has(x.url_id) ? `<span class="tag">${t("scan.fromdb")}</span>` : ""}</div>
+          <span class="url">${esc(x.url)}</span><p class="muted">${esc(e)}${e ? " · " : ""}${time(v.created_at)}${by(v) ? " · " + esc(by(v)) : ""}</p>
+          ${v.ai?.[`summary_${lang}`] ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`])}</div>` : ""}
+          ${(v.reasons || []).length ? `<ul class="reasons">${v.reasons.map((r) => `<li>${esc(r[lang] || r.ar)}</li>`).join("")}</ul>` : ""}
+          <div class="row"><button class="btn outline sm" data-open="${x.url_id}" type="button">${t("details")}</button>${v.blocked ? `<a class="btn outline sm" href="/blocked?url=${encodeURIComponent(x.url)}" target="_blank" rel="noopener">${t("d.warn")}</a>` : ""}</div></div>`;
+      }).join("")}`;
+  }
+
+  /* ---------------- detail dialog ---------------- */
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) openDetail(+b.dataset.open); });
+  $("#detail").addEventListener("click", (e) => { if (e.target === $("#detail")) $("#detail").close(); });
+  async function openDetail(id) {
+    $("#detailBody").innerHTML = `<div class="detail-body"><span class="spin"></span> ${t("loading")}</div>`;
+    if (!$("#detail").open) $("#detail").showModal();
+    const d = await api(`/api/finding?id=${id}`);
+    const v = d.verdicts[0] || {}, s = d.scans[0] || {}, pv = s.phone_view || {}, bv = s.bot_view || {}, domain = d.url.domain;
+    $("#detailBody").innerHTML = `<div class="detail-head"><div>${pill(v.verdict || "unreachable")} <span class="u">${esc(d.url.url)}</span></div><button class="btn ghost-dark sm" id="closeDetail" type="button">${t("close")}</button></div>
+      <div class="detail-body">
+        <p class="muted">${t("d.meta", { s: v.score ?? "—", m: esc(v.model === "rules" || v.model === "database" ? t("by." + v.model) : v.model || t("by.registry")), t: "" })}${time(v.created_at)} · ${esc(s.agent || "")} · ${t("d.firstSeen")} ${time(d.url.first_seen)}${s.domain_created ? ` · ${t("d.domainAge")} ${esc(s.domain_created)}` : ""}</p>
+        ${v.ai ? `<div class="ai-box"><b>${t("d.ai")}:</b> ${esc(v.ai[`summary_${lang}`] || v.ai.summary_ar)}</div>` : ""}
+        <h4>${t("d.reasons")}</h4><ul class="reasons">${(v.reasons || []).map((r) => `<li>${esc(r[lang] || r.ar)}${r.points ? ` <b class="num">(+${r.points})</b>` : ""}<span class="en">${esc(lang === "ar" ? r.en : r.ar)}</span></li>`).join("")}</ul>
+        <h4>${t("d.views")} ${s.cloaked ? `<span class="pill v-fraud">${t("cloakTag")}</span>` : ""}</h4>
+        <div class="views"><div><h5>${icon("scan")} ${t("d.phone")}</h5><b>${esc(pv.title || "")}</b><p dir="auto">${esc((pv.text || pv.error || "").slice(0, 1200))}</p></div>
+          <div><h5>${icon("eye")} ${t("d.scanner")}</h5><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div></div>
+        <h4>${t("d.fp")}</h4><div>${d.fingerprints.map((f) => `<span class="tag u">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || `<span class="muted">${t("none")}</span>`}</div>
+        <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
+        <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn outline sm" data-ov="allow" type="button">${t("d.allow")}</button>
+          <button class="btn outline sm" data-ov="" type="button">${t("d.clear")}</button><button class="btn outline sm" id="rescan" type="button">${t("d.rescan")}</button>
+          <a class="btn outline sm" href="/blocked?url=${encodeURIComponent(d.url.url)}" target="_blank" rel="noopener">${t("d.warn")}</a></div>
+        <p class="msg" id="detailMsg" role="status"></p>
+      </div>`;
+    paintIcons($("#detailBody"));
+    $("#closeDetail").onclick = () => $("#detail").close();
+    $("#rescan").onclick = async () => { await api("/api/rescan", { url: d.url.url }); $("#detailMsg").textContent = t("d.rescanned"); };
+    $$("[data-ov]", $("#detailBody")).forEach((b) => (b.onclick = async () => {
+      await api("/api/override", { domain, action: b.dataset.ov || null }); $("#detailMsg").textContent = t("d.saved"); refreshState(); loadPage();
+    }));
+  }
+
+  /* ---------------- start ---------------- */
+  paintIcons(); applyLang();
+  if (session) { const { data } = await sb.auth.getUser(); if (!data?.user) session = null; }
   session ? showApp() : showLogin();
 })();

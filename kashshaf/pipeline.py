@@ -1,28 +1,66 @@
-"""Inspect one URL: official check -> two-view fetch -> rules -> Claude agent -> stored verdict."""
+"""Inspect one URL as a case that moves through the agent company (org.py):
+
+intake (official registry, known blocks) -> web (two-view fetch) -> content / fingerprints / domain (rules)
+-> ai (Claude agent) -> chief (verdict, saved and blocked).
+
+Every step reports what it found (org.report), word for word from the evidence, for the live view.
+"""
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 
-from . import agent, config, control, fetcher, rules, store, supa
+from . import agent, config, control, fetcher, org, rules, store, supa
 
 UAE = timezone(timedelta(hours=4))  # Abu Dhabi time, no daylight saving
+
+# The chief's words for each verdict: level, Arabic, English
+VERDICT_WORDS = {
+    "fraud": ("bad", "احتيال · حُظر", "Fraud · blocked"),
+    "suspicious": ("warn", "مشبوه · للمراجعة", "Suspicious · for review"),
+    "safe": ("ok", "آمن", "Safe"),
+    "official": ("ok", "رسمي", "Official"),
+    "unreachable": ("warn", "تعذّر الفتح", "Unreachable"),
+}
+FP_NAMES = {"telegram_bot": ("بوت تيليجرام", "Telegram bot"), "telegram_link": ("رابط تيليجرام", "Telegram link"),
+            "whatsapp": ("رقم واتساب", "WhatsApp number"), "iban": ("آيبان", "IBAN"), "uae_phone": ("رقم هاتف", "phone number"),
+            "analytics_id": ("معرّف تحليلات", "analytics ID")}
+
+
+def _first(reasons: list[dict]) -> tuple[str, str]:
+    """The first reason, plus how many more."""
+    more = len(reasons) - 1
+    r = reasons[0]
+    return (r["ar"] + (f" (+{more})" if more else ""), r["en"] + (f" (+{more})" if more else ""))
 
 
 def inspect(url_row: dict, agent_name: str) -> dict:
     url, host = url_row["url"], url_row["domain"]
+    company = org.current()
+    case = company.case_start(url_row, agent_name) if company else None
+    stage = (lambda did: company.stage(case, did)) if company else (lambda did: nullcontext())
+    decide = (lambda: company.decide(case)) if company else nullcontext
+    report = (lambda who, level, ar, en: company.report(who, level, ar, en, host)) if company else (lambda *a: None)
 
+    def finish(scan, verdict):
+        with decide():
+            store.save_result(url_row, agent_name, scan, verdict)
+        if company:
+            company.case_finish(case, verdict["verdict"])
+            report(company.chief, *VERDICT_WORDS.get(verdict["verdict"], ("info", verdict["verdict"], verdict["verdict"])))
+        return verdict
+
+    # Intake: the official registry and the blocklist answer many links without any fetch.
     owner = store.official_entity(host)
     if owner:
-        verdict = {"verdict": "official", "score": 0, "claimed_entity_id": owner["id"],
-                   "reasons": [{"points": 0, "by": "registry", "ar": f"نطاق رسمي مسجّل لجهة {owner['name_ar']}",
-                                "en": f"Registered official domain of {owner['name_en']}"}]}
-        store.save_result(url_row, agent_name, None, verdict)
-        return verdict
+        report(agent_name, "ok", f"رسمي: {owner['name_ar']}", f"Official: {owner['name_en']}")
+        return finish(None, {"verdict": "official", "score": 0, "claimed_entity_id": owner["id"],
+                             "reasons": [{"points": 0, "by": "registry", "ar": f"نطاق رسمي مسجّل لجهة {owner['name_ar']}",
+                                          "en": f"Registered official domain of {owner['name_en']}"}]})
     ns = store.gov_namespace(host)
     if ns:
-        verdict = {"verdict": "official", "score": 0, "claimed_entity_id": None,
-                   "reasons": [{"points": 0, "by": "registry", "ar": f"نطاق حكومي محمي (.{ns}) لا تسجّله إلا جهات حكومية",
-                                "en": f"Protected government namespace (.{ns}); only government bodies can register it"}]}
-        store.save_result(url_row, agent_name, None, verdict)
-        return verdict
+        report(agent_name, "ok", f"نطاق حكومي محمي (.{ns})", f"Protected government namespace (.{ns})")
+        return finish(None, {"verdict": "official", "score": 0, "claimed_entity_id": None,
+                             "reasons": [{"points": 0, "by": "registry", "ar": f"نطاق حكومي محمي (.{ns}) لا تسجّله إلا جهات حكومية",
+                                          "en": f"Protected government namespace (.{ns}); only government bodies can register it"}]})
 
     # A new link on a domain the database already blocks: same verdict, no fetch, no Claude.
     # (A link that was judged before goes through the full check, so "rescan" can still clear it.)
@@ -30,34 +68,71 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     if store.is_blocked(dom) and supa.count("verdicts", url_id=f"eq.{url_row['id']}") == 0:
         when = dom.get("blocked_at") or dom.get("updated_at")
         since = datetime.fromisoformat(when).astimezone(UAE).strftime("%d/%m/%Y %H:%M") if when else ""
-        verdict = {"verdict": "fraud", "score": dom.get("score") or 100, "model": "database",
-                   "claimed_entity_id": dom.get("claimed_entity_id"),
-                   "reasons": [{"points": 0, "by": "database",
-                                "ar": f"النطاق محظور مسبقاً في قاعدة البيانات منذ {since} بتوقيت الإمارات",
-                                "en": f"Domain already blocked in the database since {since} (UAE time)"}]}
-        store.save_result(url_row, agent_name, None, verdict)
         control.saved("ai")
-        return verdict
+        report(agent_name, "bad", "نطاق محظور مسبقاً", "Domain already blocked")
+        return finish(None, {"verdict": "fraud", "score": dom.get("score") or 100, "model": "database",
+                             "claimed_entity_id": dom.get("claimed_entity_id"),
+                             "reasons": [{"points": 0, "by": "database",
+                                          "ar": f"النطاق محظور مسبقاً في قاعدة البيانات منذ {since} بتوقيت الإمارات",
+                                          "en": f"Domain already blocked in the database since {since} (UAE time)"}]})
+    report(agent_name, "info", "غير معروف · أُحيل للفحص", "Unknown · sent for checks")
 
-    phone, bot = fetcher.fetch_two_views(url)
+    # Web: open the link as a UAE phone and as a scanner.
+    with stage("web") as web_agent:
+        phone, bot = fetcher.fetch_two_views(url)
     if not phone["html"] and not bot["html"]:
-        verdict = {"verdict": "unreachable", "score": 0, "reasons": [
-            {"points": 0, "by": "fetch", "ar": "تعذّر فتح الرابط", "en": f"Could not open: {phone['error']}"}]}
-        scan = {"phone_view": {"error": phone["error"], "status": phone.get("status")},
-                "bot_view": {"error": bot["error"], "status": bot.get("status")}, "error": phone["error"]}
-        store.save_result(url_row, agent_name, scan, verdict)
-        return verdict
+        report(web_agent, "warn", "تعذّر فتح الرابط", f"Could not open: {(phone['error'] or '')[:60]}")
+        return finish({"phone_view": {"error": phone["error"], "status": phone.get("status")},
+                       "bot_view": {"error": bot["error"], "status": bot.get("status")}, "error": phone["error"]},
+                      {"verdict": "unreachable", "score": 0, "reasons": [
+                          {"points": 0, "by": "fetch", "ar": "تعذّر فتح الرابط", "en": f"Could not open: {phone['error']}"}]})
+    report(web_agent, "ok", f"فُتح كهاتف ({phone.get('status')}) وكأداة فحص ({bot.get('status')})",
+           f"Opened as phone ({phone.get('status')}) and scanner ({bot.get('status')})")
 
-    ev = rules.evaluate(host, phone, bot)
+    # Content, fingerprints and domain departments: the rules, each section in its department.
+    ev = rules.evaluate(host, phone, bot, stage=stage)
+    if company:
+        rs = ev["reasons"]
+        content = [r for r in rs if not (r["en"].startswith("Sends stolen data") or r["en"].startswith("Domain registered")
+                                         or r["en"].startswith("Domain name imitates"))]
+        domain = [r for r in rs if r["en"].startswith("Domain registered") or r["en"].startswith("Domain name imitates")]
+        if content:
+            company.credit(case, "content")
+            report((case, "content"), "bad", *_first(content))
+        else:
+            report((case, "content"), "ok", "لا إشارات احتيال في المحتوى", "No fraud signals in the content")
+        fps = ev["fingerprints"]
+        if fps:
+            company.credit(case, "fingerprints")
+            kinds = list(dict.fromkeys(f["kind"] for f in fps))
+            names = [FP_NAMES.get(k, (k, k)) for k in kinds]
+            bad = "telegram_bot" in kinds
+            report((case, "fingerprints"), "bad" if bad else "warn",
+                   "وُجد: " + "، ".join(a for a, _ in names), "Found: " + ", ".join(e for _, e in names))
+        else:
+            report((case, "fingerprints"), "ok", "لا بصمات تربطه بعصابة", "No fingerprints linking it to a gang")
+        if domain:
+            company.credit(case, "domain")
+            report((case, "domain"), "bad", *_first(domain))
+        else:
+            age = f" · مسجّل {ev['domain_created']}" if ev["domain_created"] else ""
+            report((case, "domain"), "ok", "لا إشارات في النطاق" + age,
+                   "No domain signals" + (f" · registered {ev['domain_created']}" if ev["domain_created"] else ""))
     scan = {"phone_view": ev["phone_view"], "bot_view": ev["bot_view"], "similarity": ev["similarity"],
             "cloaked": ev["cloaked"], "domain_created": ev["domain_created"]}
     verdict = {"verdict": rules.verdict_for(ev["score"]), "score": ev["score"], "reasons": ev["reasons"],
                "claimed_entity_id": ev["entity"]["id"] if ev["entity"] else None,
                "fingerprints": ev["fingerprints"], "model": "rules"}
 
+    # AI: the Claude investigator, when the rules found something worth a look.
     if agent.enabled() and ev["score"] >= config.AGENT_MIN_RULE_SCORE:
-        result = agent.investigate(url, ev)
+        with stage("ai") as ai_agent:
+            result = agent.investigate(url, ev)
         if result:
+            if company and result["verdict"] == "fraud":
+                company.credit(case, "ai")
+            level, ar, en = VERDICT_WORDS.get(result["verdict"], ("info", result["verdict"], result["verdict"]))
+            report(ai_agent, level, f"Claude: {ar} ({result['score']})", f"Claude: {en} ({result['score']})")
             known = {e["id"] for e in store.registry()["entities"]}
             verdict.update(
                 verdict=result["verdict"], score=result["score"], model=result["model"],
@@ -66,6 +141,8 @@ def inspect(url_row: dict, agent_name: str) -> dict:
                 reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
                                          for ar, en in zip(result["reasons_ar"], result["reasons_en"])],
                 ai={"summary_ar": result["summary_ar"], "summary_en": result["summary_en"], "trace": result["trace"]})
+        else:
+            report(ai_agent, "info", "لم يكمل التحقيق · القواعد تحكم", "Investigation did not finish · rules decide")
 
-    store.save_result(url_row, agent_name, scan, verdict)
-    return verdict
+    # Chief: the final verdict is saved and the domain blocked.
+    return finish(scan, verdict)

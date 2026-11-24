@@ -1,78 +1,74 @@
-"""The agent pool: N workers that claim URLs from the database queue.
+"""The agent pool, organised as a company (see org.py).
 
-Claiming goes through the `claim_url` database function (FOR UPDATE SKIP
-LOCKED), so you can run pools on several machines against one database and
-no URL is inspected twice at the same time.
+The intake department's members are the worker threads: each claims a URL from the database queue with
+the `claim_url` function (FOR UPDATE SKIP LOCKED), so pools on several machines never inspect the same URL
+twice at once. The case then moves through the other departments in pipeline.inspect.
 """
 import random
-import socket
 import threading
 import time
 
-from . import control, pipeline, store
+from . import control, org, pipeline, store
 
 
 class Pool:
     def __init__(self, size: int):
-        self.lock = threading.Lock()
         self.wake = threading.Event()
-        self.workers: dict[int, dict] = {}
-        self.next_id = 1
-        self.host = socket.gethostname().split(".")[0]
-        self.resize(size)
+        self.org = org.Org(size)
+        org.install(self.org)
+        for m in self.org.dept("intake").members:
+            self._start(m)
+
+    def _start(self, m: dict) -> None:
+        threading.Thread(target=self._run, args=(m,), daemon=True, name=m["id"]).start()
 
     def resize(self, size: int) -> None:
-        size = max(1, min(size, 500))
-        with self.lock:
-            active = [w for w in self.workers.values() if not w["stop"]]
-            for w in active[size:]:
-                w["stop"] = True
-            for _ in range(size - len(active)):
-                w = {"id": self.next_id, "name": f"agent-{self.next_id:03d}@{self.host}", "status": "idle",
-                     "job": None, "done": 0, "hits": 0, "stop": False, "since": None, "last_done": None}
-                self.workers[self.next_id] = w
-                self.next_id += 1
-                threading.Thread(target=self._run, args=(w,), daemon=True).start()
+        """Spread `size` agents over the departments (at least one leader and one member each)."""
+        for m in self.org.resize(size):
+            self._start(m)
+        self.notify()
 
     def notify(self) -> None:
         """New work was queued: wake idle agents now instead of waiting for their next poll."""
         self.wake.set()
 
-    def _run(self, w: dict) -> None:
+    def _run(self, m: dict) -> None:
         idle = 1.0
-        while not w["stop"]:
+        intake = self.org.dept("intake")
+        while not m["retire"]:
             if not control.state["running"]:
-                w.update(status="paused", job=None)
+                m.update(status="paused", job=None)
                 self.wake.wait(2)
                 continue
             try:
-                row = store.claim(w["name"])
+                row = store.claim(m["name"])
             except Exception as e:
-                print(f"[{w['name']}] claim failed: {e}")
+                print(f"[{m['name']}] claim failed: {e}")
                 row = None
             if row is None:
-                w.update(status="idle", job=None)
+                m.update(status="idle", job=None, stage=None)
                 self.wake.wait(idle + random.random())
                 self.wake.clear()
                 idle = min(idle * 2, 15)
                 continue
             idle = 1.0
-            w.update(status="working", job=row["url"], since=time.time())
+            m.update(status="working", job=row["url"], stage="intake", since=time.time())
+            intake.leader["done"] += 1
             try:
-                if (pipeline.inspect(row, w["name"]) or {}).get("verdict") == "fraud":
-                    w["hits"] += 1  # fraud this agent caught, for "most dangerous first"
+                if (pipeline.inspect(row, m["name"]) or {}).get("verdict") == "fraud":
+                    m["hits"] += 1  # fraud found in this agent's case, for "most dangerous first"
             except Exception as e:
-                print(f"[{w['name']}] {row['url']}: {type(e).__name__}: {e}")
+                print(f"[{m['name']}] {row['url']}: {type(e).__name__}: {e}")
                 try:
                     store.mark_error(row, f"{type(e).__name__}: {e}")
                 except Exception:
                     pass
-            w["done"] += 1
-            w.update(since=None, last_done=time.time())
-        with self.lock:
-            self.workers.pop(w["id"], None)
+            m["done"] += 1
+            intake.done += 1
+            m.update(status="idle", job=None, stage=None, since=None, last_done=time.time())
+        with intake.cond:
+            if m in intake.members:
+                intake.members.remove(m)
 
     def state(self) -> list[dict]:
-        with self.lock:
-            return [{k: w[k] for k in ("id", "name", "status", "job", "done", "hits", "since", "last_done")}
-                    for w in self.workers.values() if not w["stop"]]
+        return self.org.agents()

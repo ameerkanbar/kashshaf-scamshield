@@ -7,6 +7,7 @@ import difflib
 import json
 import re
 import urllib.request
+from contextlib import nullcontext
 from datetime import date
 from html.parser import HTMLParser
 
@@ -137,8 +138,12 @@ def domain_created(host: str) -> date | None:
     return None
 
 
-def evaluate(host: str, phone: dict, bot: dict) -> dict:
-    """Score a page from its phone view and bot view."""
+def evaluate(host: str, phone: dict, bot: dict, stage=None) -> dict:
+    """Score a page from its phone view and bot view.
+
+    `stage(name)` is a context manager from the agent company (org.py): the content, fingerprint and domain
+    sections each run inside the department that does that work. The scoring is the same either way."""
+    run = stage or (lambda _name: nullcontext())
     reasons, score = [], 0
 
     def add(points, ar, en):
@@ -146,61 +151,64 @@ def evaluate(host: str, phone: dict, bot: dict) -> dict:
         score += points
         reasons.append({"points": points, "ar": ar, "en": en, "by": "rules"})
 
-    pv, bv = page_text(phone.get("html", "")), page_text(bot.get("html", ""))
-    text = f"{pv['title']} {pv['text']}"
-    bot_text = f"{bv['title']} {bv['text']}"
-    fields = " | ".join(pv["inputs"]).lower()
-    card_form = bool(re.search(CARD_FIELDS, fields, re.IGNORECASE))
-    id_form = bool(re.search(ID_FIELDS, fields, re.IGNORECASE))
-    password_form = bool(re.search(PASSWORD_FIELDS, fields, re.IGNORECASE))
+    with run("content"):
+        pv, bv = page_text(phone.get("html", "")), page_text(bot.get("html", ""))
+        text = f"{pv['title']} {pv['text']}"
+        bot_text = f"{bv['title']} {bv['text']}"
+        fields = " | ".join(pv["inputs"]).lower()
+        card_form = bool(re.search(CARD_FIELDS, fields, re.IGNORECASE))
+        id_form = bool(re.search(ID_FIELDS, fields, re.IGNORECASE))
+        password_form = bool(re.search(PASSWORD_FIELDS, fields, re.IGNORECASE))
 
-    # Mentioning a body is not impersonating it (guides, news and blogs mention TAMM all the time).
-    # A page presents itself as the body when the title names it or the domain imitates it.
-    entity = claimed_entity(text, host)
-    brand_domain = bool(entity) and any(t in host for t in entity["brand_tokens"])
-    in_title = bool(entity) and any(_mentions(k, pv["title"].lower()) for k in {*entity["keywords"], entity["name_en"], entity["name_ar"]})
-    presents_as = bool(entity) and (brand_domain or in_title)
+        # Mentioning a body is not impersonating it (guides, news and blogs mention TAMM all the time).
+        # A page presents itself as the body when the title names it or the domain imitates it.
+        entity = claimed_entity(text, host)
+        brand_domain = bool(entity) and any(t in host for t in entity["brand_tokens"])
+        in_title = bool(entity) and any(_mentions(k, pv["title"].lower()) for k in {*entity["keywords"], entity["name_en"], entity["name_ar"]})
+        presents_as = bool(entity) and (brand_domain or in_title)
 
-    # Many legitimate sites (YouTube, news) serve phones a different layout. It only counts as
-    # cloaking when the phone version carries the risky content and the scanner version hides it.
-    similarity, cloaked = None, False
-    if pv["text"] and bv["text"]:
-        similarity = difflib.SequenceMatcher(None, pv["text"][:5000], bv["text"][:5000]).ratio()
-        phone_risky = card_form or id_form
-        bot_risky = bool(claimed_entity(bot_text, "")) or any_match(PAYMENT, bot_text) or any_match(CREDENTIALS, bot_text)
-        # a scanner that got an error or a bot-check page is not being shown a decoy
-        bot_decoy = bot.get("status") == 200 and not re.search(BLOCKED_PAGE, bot_text[:400], re.IGNORECASE)
-        if similarity < 0.45 and phone_risky and not bot_risky and bot_decoy:
-            cloaked = True
-            add(30, "يُظهر للهواتف صفحة تطلب مالاً أو بيانات ويخفيها عن أدوات الفحص (إخفاء)",
-                f"Shows phones a page asking for money or data and hides it from scanners (cloaking, {similarity:.0%} similar)")
+        # Many legitimate sites (YouTube, news) serve phones a different layout. It only counts as
+        # cloaking when the phone version carries the risky content and the scanner version hides it.
+        similarity, cloaked = None, False
+        if pv["text"] and bv["text"]:
+            similarity = difflib.SequenceMatcher(None, pv["text"][:5000], bv["text"][:5000]).ratio()
+            phone_risky = card_form or id_form
+            bot_risky = bool(claimed_entity(bot_text, "")) or any_match(PAYMENT, bot_text) or any_match(CREDENTIALS, bot_text)
+            # a scanner that got an error or a bot-check page is not being shown a decoy
+            bot_decoy = bot.get("status") == 200 and not re.search(BLOCKED_PAGE, bot_text[:400], re.IGNORECASE)
+            if similarity < 0.45 and phone_risky and not bot_risky and bot_decoy:
+                cloaked = True
+                add(30, "يُظهر للهواتف صفحة تطلب مالاً أو بيانات ويخفيها عن أدوات الفحص (إخفاء)",
+                    f"Shows phones a page asking for money or data and hides it from scanners (cloaking, {similarity:.0%} similar)")
 
-    if presents_as and (card_form or id_form or brand_domain or cloaked or (password_form and brand_domain)):
-        add(40, f"يقدّم نفسه على أنه {entity['name_ar']} وهو ليس على نطاقها الرسمي ({', '.join(entity['domains'])})",
-            f"Presents itself as {entity['name_en']} but is not on its official domain ({', '.join(entity['domains'])})")
-        if brand_domain:
-            add(20, "اسم النطاق يقلّد اسم الجهة", "Domain name imitates the brand")
-    else:
-        entity = None  # only mentions it; not a claim
-    if card_form:
-        add(25, "فيه نموذج يطلب بيانات البطاقة", "Has a form asking for card details")
-    elif entity and any_match(PAYMENT, text):
-        add(10, "يطلب الدفع باسم الجهة", "Asks for payment in the body's name")
-    if id_form:
-        add(15, "فيه نموذج يطلب رمز تحقق أو رقم الهوية", "Has a form asking for an OTP or Emirates ID")
-    elif password_form and entity:
-        add(10, "يطلب كلمة مرور باسم الجهة", "Asks for a password in the body's name")
-    if (entity or card_form or id_form) and any_match(URGENCY, text):
-        add(10, "يضغط على الضحية بمهلة قصيرة أو تهديد", "Pressures the victim with a deadline or threat")
+        if presents_as and (card_form or id_form or brand_domain or cloaked or (password_form and brand_domain)):
+            add(40, f"يقدّم نفسه على أنه {entity['name_ar']} وهو ليس على نطاقها الرسمي ({', '.join(entity['domains'])})",
+                f"Presents itself as {entity['name_en']} but is not on its official domain ({', '.join(entity['domains'])})")
+            if brand_domain:
+                add(20, "اسم النطاق يقلّد اسم الجهة", "Domain name imitates the brand")
+        else:
+            entity = None  # only mentions it; not a claim
+        if card_form:
+            add(25, "فيه نموذج يطلب بيانات البطاقة", "Has a form asking for card details")
+        elif entity and any_match(PAYMENT, text):
+            add(10, "يطلب الدفع باسم الجهة", "Asks for payment in the body's name")
+        if id_form:
+            add(15, "فيه نموذج يطلب رمز تحقق أو رقم الهوية", "Has a form asking for an OTP or Emirates ID")
+        elif password_form and entity:
+            add(10, "يطلب كلمة مرور باسم الجهة", "Asks for a password in the body's name")
+        if (entity or card_form or id_form) and any_match(URGENCY, text):
+            add(10, "يضغط على الضحية بمهلة قصيرة أو تهديد", "Pressures the victim with a deadline or threat")
 
-    fps = fingerprints(phone.get("html", "") + bot.get("html", ""))
-    if any(f["kind"] == "telegram_bot" for f in fps):
-        add(20, "يرسل البيانات المسروقة إلى بوت تيليجرام", "Sends stolen data to a Telegram bot")
+    with run("fingerprints"):
+        fps = fingerprints(phone.get("html", "") + bot.get("html", ""))
+        if any(f["kind"] == "telegram_bot" for f in fps):
+            add(20, "يرسل البيانات المسروقة إلى بوت تيليجرام", "Sends stolen data to a Telegram bot")
 
-    created = domain_created(host)
-    if created and (date.today() - created).days < 30 and (entity or score):
-        add(15, f"النطاق مسجّل منذ {(date.today() - created).days} يوماً فقط",
-            f"Domain registered only {(date.today() - created).days} days ago")
+    with run("domain"):
+        created = domain_created(host)
+        if created and (date.today() - created).days < 30 and (entity or score):
+            add(15, f"النطاق مسجّل منذ {(date.today() - created).days} يوماً فقط",
+                f"Domain registered only {(date.today() - created).days} days ago")
 
     return {"score": min(score, 100), "reasons": reasons, "entity": entity, "fingerprints": fps,
             "similarity": similarity, "cloaked": cloaked,

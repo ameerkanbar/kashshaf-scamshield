@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
-from . import config, control, store
+from . import config, control, health, store
 
 LOCATION = "Abu Dhabi,Abu Dhabi,United Arab Emirates"
 
@@ -33,8 +33,11 @@ def serp(query: str, *, engine: str = "google", hl: str = "en") -> dict:
     else:  # google_maps
         params.update(ll="@24.4539,54.3773,12z", type="search")
     try:
-        return _get_json("https://serpapi.com/search.json?" + urllib.parse.urlencode(params), timeout=60)
+        data = _get_json("https://serpapi.com/search.json?" + urllib.parse.urlencode(params), timeout=60)
+        health.record("serpapi", data.get("error"))
+        return data
     except urllib.error.HTTPError as e:
+        health.record("serpapi", f"HTTP {e.code}")
         if e.code == 429:  # plan used up (or rate limited): stop trying for an hour
             control.mark_exhausted("serp")
             raise control.BudgetExceeded("SerpAPI searches are used up (HTTP 429)") from None

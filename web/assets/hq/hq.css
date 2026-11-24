@@ -1,0 +1,123 @@
+/* Kashshaf HQ game. Abu Dhabi Police identity: blue and white (same tokens as web/blocked.html). */
+:root {
+  --navy:#082E6D; --blue:#135BA6; --blue2:#1d6fc4; --sky:#e8f0fa; --bg:#f2f4f7;
+  --ink:#1d2939; --muted:#667085; --line:#e4e7ec; --gray:#3F3E45; --red:#C2002F; --green:#067647; --amber:#B54708;
+}
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; }
+body { background:var(--navy); color:var(--ink); font-family:"Noto Kufi Arabic", Tahoma, sans-serif; line-height:1.8; overflow:hidden; }
+[hidden] { display:none !important; }
+.shield { width:44px; height:44px; flex:0 0 44px; }
+.shield.sm { width:28px; height:28px; flex-basis:28px; }
+.org b { display:block; color:var(--gray); font-size:18px; line-height:1.3; }
+.org small { color:var(--muted); font-size:10.5px; letter-spacing:.6px; }
+.btn { display:inline-block; cursor:pointer; border:0; border-radius:12px; padding:12px 24px; font:700 15px "Noto Kufi Arabic";
+       background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; text-decoration:none; box-shadow:0 6px 16px #082e6d40; }
+.btn:hover { filter:brightness(1.08); }
+.btn:focus-visible, .hbtn:focus-visible, .x:focus-visible { outline:3px solid #9cc6ef; outline-offset:2px; }
+.btn.block { display:block; width:100%; margin-top:12px; }
+.btn[disabled] { opacity:.6; cursor:wait; }
+.kbd { display:inline-block; font:700 11px "Noto Kufi Arabic"; background:#fff; color:var(--navy); padding:0 7px; border-radius:5px; border:1px solid #c9d3e3; border-bottom-width:2px; direction:ltr; }
+.stage { position:fixed; inset:0; }
+
+/* login */
+.login { background:linear-gradient(180deg,#135BA6 0%,#082E6D 100%); }
+.login .scene { position:absolute; inset:0; width:100%; height:100%; }
+.lcard { position:absolute; top:50%; right:6%; transform:translateY(-50%); width:min(410px, calc(100% - 32px)); background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 30px 80px #00000059; }
+.ltop { display:flex; align-items:center; gap:12px; padding:18px 24px 14px; border-bottom:4px solid var(--blue); background:#fff; }
+.lbody { padding:18px 24px 20px; }
+.lbody h1 { margin:0; font-size:26px; color:var(--navy); }
+.lbody p { margin:2px 0 10px; color:var(--muted); font-size:13px; }
+.field { display:block; margin:10px 0; font-size:13px; font-weight:600; }
+.field input { display:block; width:100%; margin-top:5px; padding:11px 13px; border:1px solid #d0d5dd; border-radius:10px; font:14px "Noto Kufi Arabic"; direction:ltr; text-align:left; background:#f9fafb; }
+.field input:focus { outline:3px solid #135BA633; border-color:var(--blue); }
+.error { color:var(--red) !important; min-height:20px; margin:8px 0 0 !important; }
+.alt { display:block; text-align:center; font-size:12.5px; color:var(--blue); margin-top:4px; }
+@media (max-width: 760px) { .lcard { right:50%; transform:translate(50%,-50%); } }
+
+/* intro */
+.intro { background:radial-gradient(circle at 50% 30%, #1d6fc4, #082E6D 70%); display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; }
+.intro-card { width:min(880px,100%); background:#fff; border-radius:22px; overflow:hidden; box-shadow:0 30px 80px #00000066; }
+.intro-body { display:grid; grid-template-columns:1.15fr 1fr; gap:10px; align-items:center; padding:18px 22px 24px; }
+.hero { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; align-items:end; background:linear-gradient(180deg,#fff,#e8f0fa); border-radius:16px; padding:10px; }
+.hero img { width:100%; }
+.intro-text h2 { margin:6px 0; color:var(--navy); font-size:22px; direction:ltr; text-align:right; word-break:break-all; }
+.intro-text p { color:var(--muted); font-size:14px; }
+.badge { display:inline-block; background:var(--navy); color:#fff; border-radius:999px; padding:2px 14px; font-size:13px; font-weight:700; }
+@media (max-width: 760px) { .intro-body { grid-template-columns:1fr; } }
+
+/* game */
+.game { display:flex; flex-direction:column; background:#0b1a33; }
+.hud { display:flex; gap:7px; align-items:center; flex-wrap:wrap; padding:7px 12px; background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; font-size:13px; box-shadow:0 2px 12px #0005; z-index:2; }
+.hud .room { font-weight:800; min-width:210px; }
+.hud .k { background:#ffffff1f; border:1px solid #ffffff33; border-radius:8px; padding:0 9px; white-space:nowrap; }
+.hud .k b { margin-inline-end:5px; }
+.hud .k.r b { color:#ffb4c0; }
+.hud .k.mode.on { background:#067647; } .hud .k.mode.off { background:var(--red); } .hud .k.mode.patrol { background:#1d6fc4; }
+.hud .keys { margin-inline-start:auto; opacity:.9; font-size:12px; }
+.hbtn { background:#fff; color:var(--navy); border:0; border-radius:8px; padding:3px 12px; font:700 12.5px "Noto Kufi Arabic"; cursor:pointer; text-decoration:none; }
+@media (max-width: 900px) { .hud .keys { display:none; } .hud .room { min-width:0; flex-basis:100%; } }
+@media (max-width: 600px) { .hud .k:not(.r):not(.mode), .hud .shield { display:none; } .hud { gap:5px; padding:6px 10px; } }
+.mapbox { position:relative; flex:1; outline:none; overflow:hidden; }
+.mapbox canvas { position:absolute; inset:0; width:100%; height:100%; }
+.loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#fff; font-size:16px; background:var(--navy); }
+.focus-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#082e6d66; cursor:pointer; }
+
+.touch { position:absolute; inset:auto 0 16px 0; display:flex; justify-content:space-between; align-items:flex-end; padding:0 16px; pointer-events:none; }
+.touch .pad { display:grid; grid-template-columns:repeat(3,58px); grid-template-rows:repeat(3,58px); pointer-events:auto; direction:ltr; }
+.touch .pad button, .touch .act { border:0; border-radius:14px; background:#ffffffd9; color:var(--navy); font-size:20px; box-shadow:0 4px 12px #0004; touch-action:none; }
+.touch .pad [data-dir=up] { grid-column:2; grid-row:1; } .touch .pad [data-dir=left] { grid-column:1; grid-row:2; }
+.touch .pad [data-dir=right] { grid-column:3; grid-row:2; } .touch .pad [data-dir=down] { grid-column:2; grid-row:3; }
+.touch .act { width:96px; height:96px; border-radius:50%; background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; font:800 16px "Noto Kufi Arabic"; pointer-events:auto; }
+
+/* panel */
+.panel { position:absolute; inset:3% 5%; display:none; flex-direction:column; background:#fff; border-radius:18px; overflow:hidden; box-shadow:0 30px 80px #00000073; z-index:3; }
+.panel.open { display:flex; }
+.panel .ph { display:flex; gap:14px; align-items:center; padding:10px 16px; background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; }
+.panel .ph canvas { width:60px; height:60px; border-radius:50%; background:#e8f0fa; border:3px solid #fff; flex:0 0 60px; }
+.panel .who { flex:1; min-width:0; }
+.panel .who b { font-size:16px; }
+.panel .who .sys { font-size:12px; opacity:.85; }
+.panel .say { font-size:14px; min-height:22px; }
+.panel .x { background:#ffffff26; color:#fff; border:1px solid #ffffff55; border-radius:10px; padding:6px 12px; font:700 13px "Noto Kufi Arabic"; cursor:pointer; }
+@media (max-width: 760px) { .panel { inset:1%; } }
+
+.screen { flex:1; overflow:auto; padding:14px 18px 20px; font-size:13.5px; background:var(--bg); }
+.screen h4 { margin:0 0 8px; font-size:16px; color:var(--navy); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.screen .muted { color:var(--muted); font-size:12.5px; }
+.screen .row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+.screen table { width:100%; border-collapse:collapse; font-size:12.5px; margin:6px 0 10px; background:#fff; }
+.screen th { background:var(--navy); color:#fff; text-align:right; padding:6px 8px; font-weight:600; position:sticky; top:-14px; }
+.screen td { border-bottom:1px solid var(--line); padding:6px 8px; vertical-align:top; }
+.screen tr.click { cursor:pointer; } .screen tr.click:hover td { background:#eef4fc; }
+.screen .u { font-family:Consolas,monospace; direction:ltr; unicode-bidi:embed; font-size:11.5px; color:#344054; word-break:break-all; }
+.screen .kp { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+.screen .kp div { background:#fff; border:1px solid var(--line); border-top:4px solid var(--blue); border-radius:10px; padding:8px 10px; }
+.screen .kp div.d { border-top-color:var(--red); }
+.screen .kp b { display:block; font-size:24px; line-height:1.2; color:var(--navy); }
+.screen .kp div.d b { color:var(--red); }
+.screen .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.screen .cardx { background:#fff; border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:10px; }
+.screen .cardx.alert { border-color:var(--red); background:#fef3f2; color:var(--red); font-weight:700; }
+.screen .cardx.ok { border-color:#abefc6; background:#ecfdf3; color:var(--green); font-weight:700; }
+.screen .cardx.wait { border-color:#b2ccff; background:#eff4ff; color:var(--navy); font-weight:700; }
+.pill { display:inline-block; color:#fff; font-size:11px; font-weight:700; padding:1px 10px; border-radius:10px; white-space:nowrap; }
+.tag { display:inline-block; background:#eef2f8; border:1px solid #d0d7e2; font-size:11px; padding:0 6px; margin:2px; border-radius:5px; }
+.sbtn { display:inline-block; background:linear-gradient(180deg,#135BA6,#082E6D); color:#fff; border:0; border-radius:8px; padding:6px 12px; font:600 12.5px "Noto Kufi Arabic"; margin:2px; cursor:pointer; text-decoration:none; }
+.sbtn.r { background:var(--red); } .sbtn.g { background:var(--green); } .sbtn.l { background:#fff; color:var(--navy); border:1px solid #c9d3e3; }
+.sbtn[disabled] { opacity:.55; cursor:wait; }
+.screen textarea, .screen input[type=text], .screen input[type=search], .screen input[type=number], .screen select { font:13px "Noto Kufi Arabic"; padding:7px 10px; border:1px solid #d0d5dd; border-radius:8px; background:#fff; }
+.screen textarea { width:100%; }
+.screen input[type=text], .screen input[type=search] { flex:1; min-width:160px; }
+.reasons { margin:6px 0; padding-right:18px; } .reasons li { margin:2px 0; } .reasons .en { display:block; color:var(--muted); font-size:11.5px; direction:ltr; text-align:left; }
+.views { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .views div { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:8px; font-size:12px; max-height:220px; overflow:auto; }
+.views h5 { margin:0 0 4px; color:var(--navy); font-size:12.5px; }
+.dots { display:grid; grid-template-columns:repeat(25,1fr); gap:4px; margin:8px 0; }
+.dots i { aspect-ratio:1; background:#c5cedc; border-radius:3px; } .dots i.w { background:#2e9e5b; } .dots i.h { background:var(--red); } .dots i.p { background:#475467; }
+.meter { height:8px; background:#e4e9f2; border-radius:4px; margin:3px 0 8px; overflow:hidden; } .meter i { display:block; height:100%; background:var(--blue); } .meter i.full { background:var(--red); }
+.ai-box { background:#eff4ff; border:1px solid #b2ccff; border-radius:10px; padding:8px 10px; margin:6px 0; }
+.spin { display:inline-block; width:12px; height:12px; border:2px solid #b2ccff; border-top-color:var(--blue); border-radius:50%; animation:sp 1s linear infinite; vertical-align:middle; }
+@keyframes sp { to { transform:rotate(360deg); } }
+.msg { min-height:20px; font-size:12.5px; color:var(--navy); }
+.msg.err { color:var(--red); }
+@media (max-width:760px) { .screen .two, .views { grid-template-columns:1fr; } .screen .kp { grid-template-columns:repeat(2,1fr); } }

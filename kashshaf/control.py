@@ -10,7 +10,7 @@ import random
 import threading
 import time
 
-from . import config, store
+from . import config, org, store
 
 
 class BudgetExceeded(RuntimeError):
@@ -140,16 +140,23 @@ def _patrol(pool) -> None:
             if fresh:
                 persona, query = random.choice(fresh)
                 hl = {"ar": "ar", "hi": "hi", "ur": "ur", "tl": "tl"}.get(persona["language"], "en")
-                r = discovery.search_google(query, persona=persona, hl=hl, maps=random.random() < 0.3, by="patrol")
+                with org.current().dept("discovery").work(query, "discovery") as m:
+                    r = discovery.search_google(query, persona=persona, hl=hl, maps=random.random() < 0.3, by="patrol")
+                    org.current().report(m, "ok", f"«{query}»: {r['new']} جديد · {r['known_blocked']} محظور",
+                                         f"“{query}”: {r['new']} new · {r['known_blocked']} blocked")
                 did = {"kind": "google", "query": query, "persona": persona["name"], "queued": r["new"],
                        "known": r["known"], "known_blocked": r["known_blocked"]}
             else:  # every 4th round, when the cap is reached, or every search was run in the last day: free sources
                 kind, fn = free_sources[state["patrol_rounds"] % 2]
-                did = {"kind": kind, "queued": fn()}
+                with org.current().dept("discovery").work(kind, "discovery") as m:
+                    did = {"kind": kind, "queued": fn()}
+                    org.current().report(m, "ok" if did["queued"] else "info", f"أضاف {did['queued']} رابط للطابور", f"Queued {did['queued']} links")
         except BudgetExceeded as e:
             did = {"kind": "paused", "error": str(e)}
         except Exception as e:
             did = {"kind": "error", "error": f"{type(e).__name__}: {e}"[:200]}
+            print(f"[patrol] round {state['patrol_rounds']} failed: {did['error']}")  # never fail silently
+            store.audit("patrol", "patrol_error", None, {"error": did["error"], "round": state["patrol_rounds"]})
         state["patrol_last"] = {**(did or {}), "at": time.time()}
         pool.notify()
         _wake.wait(config.PATROL_INTERVAL_SEC)

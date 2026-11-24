@@ -334,5 +334,43 @@ def audit_log(limit: int = 100, actions: list[str] | None = None, sort: str = "n
     return rows[:limit]
 
 
+# Sources the agents found on their own, before anyone reported the link.
+PROACTIVE = {"serp_organic", "serp_ad", "serp_ai_overview", "maps", "ct_log", "phish_feed"}
+
+
+def insights() -> dict:
+    """Numbers for the dashboard charts, from the latest verdict of every link (up to 5000)."""
+    rows = supa.select("findings", select="url_id,verdict,score,created_at,sources,claimed_entity_id,entity_ar,entity_en,cloaked,blocked",
+                       order="created_at.desc", limit="5000")
+    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+    hours = [now - timedelta(hours=23 - i) for i in range(24)]
+    timeline = [{"hour": h.isoformat(), "fraud": 0, "suspicious": 0, "official": 0, "safe": 0, "unreachable": 0} for h in hours]
+    verdicts = {k: 0 for k in ("fraud", "suspicious", "official", "safe", "unreachable")}
+    sources: dict[str, int] = {}
+    entities: dict[str, dict] = {}
+    found = {"agents": 0, "people": 0}  # who found each fraud/suspicious link first
+    cloaked = protected = 0
+    for r in rows:
+        verdicts[r["verdict"]] = verdicts.get(r["verdict"], 0) + 1
+        at = datetime.fromisoformat(r["created_at"]).astimezone(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        idx = 23 - int((now - at).total_seconds() // 3600)
+        if 0 <= idx < 24:
+            timeline[idx][r["verdict"]] = timeline[idx].get(r["verdict"], 0) + 1
+        src = set(r.get("sources") or [])
+        for s in src:
+            sources[s] = sources.get(s, 0) + 1
+        if r["verdict"] in ("fraud", "suspicious"):
+            found["agents" if src & PROACTIVE else "people"] += 1
+            if r.get("cloaked"):
+                cloaked += 1
+            key = r.get("claimed_entity_id") or "_none"
+            e = entities.setdefault(key, {"id": key, "ar": r.get("entity_ar") or "بدون جهة", "en": r.get("entity_en") or "No entity", "count": 0})
+            e["count"] += 1
+        if r.get("blocked") and "gateway" in src:
+            protected += 1  # someone clicked a blocked link through the safe-link gateway and saw the warning instead
+    return {"verdicts": verdicts, "timeline": timeline, "sources": sources, "found": found, "cloaked": cloaked,
+            "protected_clicks": protected, "entities": sorted(entities.values(), key=lambda e: -e["count"])[:8], "total": len(rows)}
+
+
 def personas() -> list[dict]:
     return supa.select("personas", active="is.true", select="*")

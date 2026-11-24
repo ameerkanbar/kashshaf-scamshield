@@ -7,7 +7,7 @@ Google, then must submit one structured verdict with reasons.
 import json
 import os
 
-from . import config, control, discovery, fetcher, rules, store
+from . import config, control, discovery, fetcher, health, rules, store
 
 MODEL = os.environ.get("AGENT_MODEL", "claude-opus-5-5")
 MAX_TURNS = 8
@@ -129,13 +129,17 @@ def investigate(url: str, evidence: dict) -> dict | None:
             )
         except anthropic.RateLimitError as e:
             print(f"[agent] rate limited: {e}")
+            health.record("claude", f"rate limited: {e}")
             return None
         except anthropic.APIStatusError as e:
             print(f"[agent] API error {e.status_code}: {e}")
+            health.record("claude", f"API error {e.status_code}: {e}")
             return None
         except anthropic.APIConnectionError as e:
             print(f"[agent] connection error: {e}")
+            health.record("claude", f"connection error: {e}")
             return None
+        health.record("claude")
         control.add_tokens(response.usage.input_tokens, response.usage.output_tokens)
         if response.stop_reason == "refusal":
             return None
