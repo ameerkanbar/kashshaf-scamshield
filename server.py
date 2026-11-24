@@ -3,6 +3,7 @@
 Run:  .venv/bin/python server.py      then open http://localhost:8080 (the HQ game is at /hq)
 """
 import argparse
+import base64
 import json
 import mimetypes
 import re
@@ -14,7 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
 from kashshaf import config  # loads .env first
-from kashshaf import agent, control, discovery, health, org, pipeline, store, supa
+from kashshaf import agent, control, discovery, evidence, health, importer, org, pipeline, store, supa
 from kashshaf.workers import Pool
 
 WEB = Path(__file__).resolve().parent / "web"
@@ -146,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
             if result["blocked"]:
                 store.queue_url(url, "gateway")  # remember the click; a known link is not checked again
                 pool.notify()
-            target = f"/blocked?url={quote(url, safe='')}" if result["blocked"] else url
+            target = result["warning_url"] if result["blocked"] else url
             return self._send(302, b"", "text/plain", {"Location": target})
 
         # Analysts only
@@ -164,6 +165,30 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/scan_result":
             ids = [int(x) for x in q.get("ids", "").split(",") if x.strip().isdigit()][:50]
             return self.json(store.scan_result(ids))
+        if path == "/api/import_result":
+            return self.json(store.import_result(int(q["id"])))
+        # Evidence for police use and takedown requests
+        if path == "/api/evidence":
+            return self.json({"items": evidence.for_url(int(q["url_id"])), "chrome": bool(evidence.chrome())})
+        if path == "/api/evidence_file":
+            got = evidence.file_bytes(int(q["id"]), q.get("kind", ""))
+            if not got:
+                return self.json({"error": "not found"}, 404)
+            # the page copy is the scammer's own HTML: always a text download, never rendered here
+            extra = {"Content-Disposition": 'attachment; filename="page-copy.txt"'} if q.get("kind") == "page" else None
+            return self._send(200, got[0], got[1], extra)
+        if path == "/api/evidence_report":
+            g = evidence.gather(int(q["url_id"]))
+            ev = g["evidence"] or {}
+            shot = supa.storage_get(evidence.BUCKET, ev["screenshot_path"]) if ev.get("screenshot_path") else None
+            body = evidence.report_html(g, user.get("email") or user["id"], shot).encode("utf-8")
+            return self._send(200, body, "text/html; charset=utf-8",
+                              {"Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'"})
+        if path == "/api/evidence_pack":
+            actor = user.get("email") or user["id"]
+            name, data = evidence.pack(int(q["url_id"]), actor)
+            store.audit(actor, "evidence_export", name)
+            return self._send(200, data, "application/zip", {"Content-Disposition": f'attachment; filename="{name}"'})
         if path == "/api/finding":
             return self.json(store.finding_detail(int(q["id"])))
         if path == "/api/blocked":
@@ -209,6 +234,19 @@ class Handler(BaseHTTPRequestHandler):
             store.audit(actor, "scan", None, {"urls": urls, "known": sum(x["from_db"] for x in links)})
             pool.notify()
             return self.json({"at": store.now(), "links": links})
+        if path == "/api/import":
+            # A file of links (CSV, Excel, TXT or JSON), sent as base64. Every link gets the full check.
+            name = (data.get("file_name") or "links.csv").strip()
+            try:
+                raw = base64.b64decode(data.get("data") or "", validate=True)
+                parsed = importer.parse(name, raw)
+            except Exception:
+                return self.json({"error": "تعذّرت قراءة الملف. الصيغ المدعومة: CSV أو Excel (.xlsx) أو TXT أو JSON"}, 400)
+            if not parsed["items"]:
+                return self.json({"error": "لم نجد أي روابط في الملف"}, 400)
+            batch = store.create_import(name, actor, parsed, config.RECHECK_AFTER_HOURS)
+            pool.notify()
+            return self.json({"import": batch, "url_column": parsed["url_column"], "label_column": parsed["label_column"]})
         if path == "/api/discover":
             kind = data.get("kind")
             if kind not in ("google", "ct", "feed"):
@@ -265,10 +303,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(pool.state())
         if path == "/api/override":
             action = data.get("action") or None
-            if action not in (None, "block", "allow") or not data.get("domain"):
-                return self.json({"error": "domain and action (block, allow or null) required"}, 400)
-            store.set_override(data["domain"].lower(), action, actor, data.get("note"))
+            if action not in (None, "block", "allow", "official") or not data.get("domain"):
+                return self.json({"error": "domain and action (block, allow, official or null) required"}, 400)
+            try:
+                store.set_override(data["domain"].lower(), action, actor, data.get("note"))
+            except ValueError:
+                return self.json({"error": "لا توجد جهة منتحَلة لهذا النطاق، فلا يمكن تسجيله كرسمي"}, 400)
+            pool.notify()
             return self.json({"ok": True})
+        if path == "/api/evidence_capture":
+            rows = supa.select("urls", id=f"eq.{int(data['url_id'])}", select="*")
+            if not rows:
+                return self.json({"error": "not found"}, 404)
+            return self.json(evidence.capture(rows[0], actor))
         if path == "/api/integrations/test":  # one service, with a real request where that costs (Claude)
             sid = data.get("id")
             if sid not in health.CHECKS:
@@ -294,8 +341,10 @@ class Handler(BaseHTTPRequestHandler):
             return {"domain": domain, "known": True, "verdict": "official", "blocked": False}
         if row is None:
             return {"domain": domain, "known": False, "blocked": False}
+        review = store.pending_review(row)
         return {"domain": domain, "known": True, "verdict": row["verdict"], "blocked": store.is_blocked(row),
-                "warning_url": f"/blocked?url={quote(url, safe='')}"}
+                "pending_review": review,
+                "warning_url": f"/blocked?url={quote(url, safe='')}" + ("&review=1" if review else "")}
 
 
 def discovery_loop():

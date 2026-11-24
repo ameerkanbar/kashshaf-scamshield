@@ -8,14 +8,14 @@ Every step reports what it found (org.report), word for word from the evidence, 
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 
-from . import agent, config, control, fetcher, org, rules, store, supa
+from . import agent, config, control, evidence, fetcher, org, rules, store, supa
 
 UAE = timezone(timedelta(hours=4))  # Abu Dhabi time, no daylight saving
 
 # The chief's words for each verdict: level, Arabic, English
 VERDICT_WORDS = {
     "fraud": ("bad", "احتيال · حُظر", "Fraud · blocked"),
-    "suspicious": ("warn", "مشبوه · للمراجعة", "Suspicious · for review"),
+    "suspicious": ("warn", "مشبوه · محظور حتى المراجعة", "Suspicious · blocked pending review"),
     "safe": ("ok", "آمن", "Safe"),
     "official": ("ok", "رسمي", "Official"),
     "unreachable": ("warn", "تعذّر الفتح", "Unreachable"),
@@ -43,6 +43,8 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     def finish(scan, verdict):
         with decide():
             store.save_result(url_row, agent_name, scan, verdict)
+        if verdict["verdict"] in store.BLOCKING:
+            evidence.schedule(url_row, agent_name)  # scam pages vanish fast: keep the evidence from this moment
         if company:
             company.case_finish(case, verdict["verdict"])
             report(company.chief, *VERDICT_WORDS.get(verdict["verdict"], ("info", verdict["verdict"], verdict["verdict"])))
@@ -65,7 +67,7 @@ def inspect(url_row: dict, agent_name: str) -> dict:
     # A new link on a domain the database already blocks: same verdict, no fetch, no Claude.
     # (A link that was judged before goes through the full check, so "rescan" can still clear it.)
     dom = store.domain_status(host)
-    if store.is_blocked(dom) and supa.count("verdicts", url_id=f"eq.{url_row['id']}") == 0:
+    if store.is_confirmed_fraud(dom) and supa.count("verdicts", url_id=f"eq.{url_row['id']}") == 0:
         when = dom.get("blocked_at") or dom.get("updated_at")
         since = datetime.fromisoformat(when).astimezone(UAE).strftime("%d/%m/%Y %H:%M") if when else ""
         control.saved("ai")
@@ -124,25 +126,35 @@ def inspect(url_row: dict, agent_name: str) -> dict:
                "claimed_entity_id": ev["entity"]["id"] if ev["entity"] else None,
                "fingerprints": ev["fingerprints"], "model": "rules"}
 
-    # AI: the Claude investigator, when the rules found something worth a look.
+    # AI department: the full check. Claude reads the whole page, the registry, the domain's registration
+    # and the web before the final verdict. Only when it finds nothing wrong is a site called safe.
+    result = None
     if agent.enabled() and ev["score"] >= config.AGENT_MIN_RULE_SCORE:
         with stage("ai") as ai_agent:
             result = agent.investigate(url, ev)
         if result:
-            if company and result["verdict"] == "fraud":
-                company.credit(case, "ai")
             level, ar, en = VERDICT_WORDS.get(result["verdict"], ("info", result["verdict"], result["verdict"]))
             report(ai_agent, level, f"Claude: {ar} ({result['score']})", f"Claude: {en} ({result['score']})")
-            known = {e["id"] for e in store.registry()["entities"]}
-            verdict.update(
-                verdict=result["verdict"], score=result["score"], model=result["model"],
-                claimed_entity_id=result["claimed_entity_id"] if result["claimed_entity_id"] in known
-                else verdict["claimed_entity_id"],
-                reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
-                                         for ar, en in zip(result["reasons_ar"], result["reasons_en"])],
-                ai={"summary_ar": result["summary_ar"], "summary_en": result["summary_en"], "trace": result["trace"]})
+            if company and result["verdict"] == "fraud":
+                company.credit(case, "ai")
         else:
             report(ai_agent, "info", "لم يكمل التحقيق · القواعد تحكم", "Investigation did not finish · rules decide")
+    if not result and ev["score"] > 0 and verdict["verdict"] == "safe":
+        # the rules saw warning signs but the full check could not run: not sure = suspicious,
+        # so it is blocked until an analyst looks at it
+        verdict.update(verdict="suspicious", score=max(ev["score"], rules.SUSPICIOUS_AT))
+        verdict["reasons"] = ev["reasons"] + [{"points": 0, "by": "rules",
+            "ar": "ظهرت علامات تحذير ولم يكتمل التحقيق الكامل: محظور احترازياً حتى يراجعه محلل",
+            "en": "Warning signs and the full investigation could not run: blocked as a precaution until an analyst reviews it"}]
+    if result:
+        known = {e["id"] for e in store.registry()["entities"]}
+        verdict.update(
+            verdict=result["verdict"], score=result["score"], model=result["model"],
+            claimed_entity_id=result.get("claimed_entity_id") if result.get("claimed_entity_id") in known
+            else verdict["claimed_entity_id"],
+            reasons=ev["reasons"] + [{"points": None, "by": "ai", "ar": ar, "en": en}
+                                     for ar, en in zip(result.get("reasons_ar") or [], result.get("reasons_en") or [])],
+            ai={"summary_ar": result.get("summary_ar"), "summary_en": result.get("summary_en"), "trace": result.get("trace")})
 
-    # Chief: the final verdict is saved and the domain blocked.
+    # Chief: the final verdict is saved and the domain blocked (fraud, or suspicious pending review).
     return finish(scan, verdict)

@@ -56,6 +56,7 @@
       <span class="nav-group" data-i18n="nav.investigate"></span>
       <a href="#scan" data-page="scan"><i data-icon="scan"></i><span data-i18n="nav.scan"></span></a>
       <a href="#findings" data-page="findings"><i data-icon="list"></i><span data-i18n="nav.findings"></span></a>
+      <a href="#review" data-page="review"><i data-icon="review"></i><span data-i18n="nav.review"></span><em class="count warn" id="navReview"></em></a>
       <a href="#blocked" data-page="blocked"><i data-icon="block"></i><span data-i18n="nav.blocked"></span><em class="count" id="navBlocked"></em></a>
       <a href="#gangs" data-page="gangs"><i data-icon="link"></i><span data-i18n="nav.gangs"></span></a>
       <span class="nav-group" data-i18n="nav.system"></span>
@@ -218,13 +219,32 @@
           </div>
         </div>
         <div class="card" id="scanResult" aria-live="polite" hidden></div>
+
+        <!-- Import a file of links: each one gets the full check; labels (if any) give precision and recall -->
+        <div class="card" id="importPanel">
+          <div class="card-head"><div><h3 data-i18n="imp.title"></h3><p data-i18n="imp.desc"></p></div></div>
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="importFile" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" hidden>
+            <i data-icon="upload"></i>
+            <b data-i18n="imp.drop"></b>
+            <span class="muted" data-i18n="imp.limit"></span>
+          </label>
+          <p class="msg" id="importMsg" role="alert"></p>
+          <div id="importResult" aria-live="polite" hidden></div>
+        </div>
+      </section>
+
+      <!-- Review: suspicious sites, blocked until an analyst decides -->
+      <section data-view="review" hidden>
+        <p class="note review-note" data-i18n="rev.note"></p>
+        <div class="results" id="reviewBody" role="list"></div>
       </section>
 
       <!-- Findings -->
       <section data-view="findings" hidden>
         <div class="card">
           <div class="filters"><div class="search"><i data-icon="search"></i><input id="search" type="search" data-i18n-ph="f.search" dir="auto"></div>
-            <select id="verdictFilter"><option value="" data-i18n="f.all"></option><option value="fraud" data-i18n="v.fraud"></option><option value="suspicious" data-i18n="v.suspicious"></option><option value="safe" data-i18n="v.safe"></option><option value="official" data-i18n="v.official"></option><option value="unreachable" data-i18n="v.unreachable"></option></select></div>
+            <select id="verdictFilter"><option value="" data-i18n="f.all"></option><option value="fraud" data-i18n="v.fraud"></option><option value="suspicious" data-i18n="v.suspicious"></option><option value="review" data-i18n="f.review"></option><option value="safe" data-i18n="v.safe"></option><option value="official" data-i18n="v.official"></option><option value="unreachable" data-i18n="v.unreachable"></option></select></div>
           <div class="table-wrap"><table class="table"><thead><tr><th data-i18n="col.verdict"></th><th data-i18n="col.time"></th><th data-i18n="col.url"></th><th data-i18n="col.entity"></th><th data-i18n="col.source"></th><th data-i18n="col.blocked"></th><th></th></tr></thead><tbody id="findingsBody"></tbody></table></div>
         </div>
       </section>

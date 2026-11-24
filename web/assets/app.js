@@ -29,6 +29,7 @@
     fp: '<path d="M12 11v3a6 6 0 0 1-1 3.5M8.5 9.5a4 4 0 0 1 7 2.5v2M5.5 10a7 7 0 0 1 13 2v1M7 19a9 9 0 0 0 1-4M17 15.5c0 1.8-.4 3.5-1.2 5"/>',
     gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/>',
+    review: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', upload: '<path d="M12 16V4M7 9l5-5 5 5M4 20h16"/>',
     crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/>',
     eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
     target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>', hand: '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14a7 7 0 0 1-7 7 6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.5L8 15"/>',
@@ -85,7 +86,7 @@
   $("#logout").onclick = async () => { await sb.auth.signOut(); session = null; showLogin(); };
 
   /* ---------------- routing ---------------- */
-  const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "blocked", "gangs", "discover", "agents", "audit"];
+  const PAGES = ["ops", "org", "live", "settings", "analytics", "scan", "findings", "review", "blocked", "gangs", "discover", "agents", "audit"];
   let page = "ops";
   function route() {
     const p = location.hash.slice(1);
@@ -133,6 +134,7 @@
       [!c.running ? t("chip.stopped") : c.patrol ? t("chip.patrol") : t("chip.running"), c.running]].map(([x, on]) => `<span class="chip ${on ? "on" : "off"}"><i></i>${esc(x)}</span>`).join("");
     $$(".live-dot").forEach((d) => d.classList.toggle("off", !c.running));
     $("#navBlocked").textContent = s.blocked || "";
+    $("#navReview").textContent = s.review || "";
     // hero + controls
     $("#heroText").textContent = t("hero.text", { n: st.agents.length });
     if (document.activeElement !== $("#heroCount")) $("#heroCount").value = st.agents.length;
@@ -285,7 +287,8 @@
         const ins = await api("/api/insights"); if (p !== page) return; insights = ins;
         const s = st?.stats || {};
         fillKpis($("#anKpis"), [kpi("list", ins.total, t("kpi.urls")), kpi("alert", ins.verdicts.fraud || 0, t("kpi.fraud"), "", "danger"),
-          kpi("block", s.blocked ?? 0, t("kpi.blocked"), "", "danger"), kpi("hand", ins.protected_clicks, t("kpi.protected"), t("kpi.protected.d"), "good")]);
+          kpi("block", s.blocked ?? 0, t("kpi.blocked"), "", "danger"), kpi("review", s.review ?? 0, t("kpi.review"), t("kpi.review.d"), "warn"),
+          kpi("hand", ins.protected_clicks, t("kpi.protected"), t("kpi.protected.d"), "good")]);
         analyticsCharts();
       }
       if (p === "findings" && !(poll && document.activeElement === $("#search"))) await loadFindings();
@@ -297,7 +300,8 @@
       if (p === "live") renderLive();
       if (p === "settings" && !poll) await loadSettings();
       if (p === "audit") await loadAudit();
-      if (p === "scan") await updateScan();
+      if (p === "scan") await Promise.all([updateScan(), updateImport()]);
+      if (p === "review") await loadReview();
     } catch (e) { console.warn(e); } finally { pageBusy = false; }
     paintIcons();
   }
@@ -309,7 +313,7 @@
     <td><span class="url">${esc(f.url)}</span><div class="sub">${esc(f.title || "")}</div></td>
     <td>${esc(ent(f) || "—")}</td>
     <td>${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("")}<div class="sub">${t("sightings", { n: f.sightings })}</div></td>
-    <td>${f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("manual")}</div>` : ""}</td>
+    <td>${f.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span><div class="sub">${t("rev.pendingSub")}</div>` : f.blocked ? `<span class="blocked">${t("blockedTag")}</span>` : "—"}${f.override ? `<div class="sub">${t("rev.decided", { d: t("rev.d." + (f.override === "block" ? "block" : "allow")) })}</div>` : ""}</td>
     <td><button class="btn outline sm" data-open="${f.url_id}" type="button">${t("details")}</button></td></tr>`;
   async function loadFindings() {
     const q = new URLSearchParams({ q: $("#search").value, verdict: $("#verdictFilter").value, sort });
@@ -327,12 +331,13 @@
     const rows = blockedRows.filter((b) => !q || b.domain.includes(q) || (b.entity_ar || "").includes(q) || (b.entity_en || "").toLowerCase().includes(q));
     $("#blockedBody").innerHTML = rows.map((b) => `<tr><td>${time(b.blocked_at)}</td><td><span class="url">${esc(b.domain)}</span></td><td>${esc(ent(b) || "—")}</td>
       <td class="num">${b.score}/100<div class="scorebar"><i style="width:${b.score}%"></i></div></td><td class="num">${b.links}</td><td class="num">${b.sightings}</td>
-      <td>${time(b.first_seen)}</td><td>${time(b.last_seen) || "—"}</td><td>${b.override === "block" ? `${t("manual")}<div class="sub">${esc(b.override_by || "")}</div>` : t("auto")}</td></tr>`).join("")
+      <td>${time(b.first_seen)}</td><td>${time(b.last_seen) || "—"}</td><td>${b.pending_review ? `<span class="pending">⏳ ${t("rev.pending")}</span>${decisionButtons(b.domain, b.claimed_entity_id)}` : b.override === "block" ? `${t("manual")}<div class="sub">${esc(b.override_by || "")}</div>` : t("auto")}</td></tr>`).join("")
       || `<tr><td colspan="9" class="empty">${t("blocked.none")}</td></tr>`;
   }
   $("#blockedSearch").addEventListener("input", renderBlocked);
   $("#exportBtn").onclick = () => {
-    const cols = ["domain", "entity_en", "score", "blocked_at", "first_seen", "last_seen", "links", "sightings", "override"];
+    const cols = ["domain", "entity_en", "score", "blocked_at", "first_seen", "last_seen", "links", "sightings", "override",
+      "pending_review", "registrar", "registrar_abuse", "domain_created", "ip", "hosting", "hosting_abuse", "evidence_at"];
     const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob(["﻿" + [cols.join(","), ...blockedRows.map((b) => cols.map((c) => cell(b[c])).join(","))].join("\n")], { type: "text/csv;charset=utf-8" }));
@@ -589,6 +594,167 @@
       }).join("")}`;
   }
 
+  // ---- review queue (upstream): suspicious sites blocked until an analyst decides ----
+  const decisionButtons = (domain, entity) => `<div class="decide">
+      <button class="btn ok sm" data-decide="allow" data-domain="${esc(domain)}" type="button">${esc(t("rev.allow"))}</button>
+      ${entity ? `<button class="btn outline sm" data-decide="official" data-domain="${esc(domain)}" type="button">${esc(t("rev.official"))}</button>` : ""}
+      <button class="btn danger sm" data-decide="block" data-domain="${esc(domain)}" type="button">${esc(t("rev.block"))}</button></div>`;
+  const reviewCard = (f) => `<article class="result v-edge-${esc(f.verdict)}" role="listitem">
+      <div class="result-verdict">${pill(f.verdict)}<div class="result-score num">${f.score}<small>/100</small></div>${f.cloaked ? `<span class="tag red">${t("cloakTag")}</span>` : ""}</div>
+      <div class="result-main"><span class="url">${esc(f.url)}</span>${f.title ? `<div class="result-title">${esc(f.title)}</div>` : ""}
+        <div class="result-meta"><span><span class="muted">${esc(t("col.entity"))}:</span> ${esc(ent(f) || "—")}</span>
+          <span><span class="muted">${esc(t("col.source"))}:</span> ${(f.sources || []).map((s) => `<span class="tag">${src(s)}</span>`).join("") || "—"} <span class="muted">· ${t("sightings", { n: f.sightings })}</span></span>
+          <span>${time(f.created_at)}</span></div></div>
+      <div class="result-side"><div><span class="pending">⏳ ${esc(t("rev.pending"))}</span><div class="muted">${esc(t("rev.pendingSub"))}</div></div>
+        <button class="btn outline sm" data-open="${f.url_id}" type="button">${esc(t("rev.evidence"))}</button>${decisionButtons(f.domain, f.claimed_entity_id)}</div></article>`;
+  async function loadReview() {
+    const rows = await api(`/api/findings?verdict=review&sort=${sort}`);
+    const seen = new Set(), sites = rows.filter((f) => !seen.has(f.domain) && seen.add(f.domain)); // one card per site: its most dangerous link
+    $("#reviewBody").innerHTML = sites.map(reviewCard).join("") || `<div class="card empty">${esc(t("rev.none"))}</div>`;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-decide]"); if (!b) return;
+    b.closest(".decide").querySelectorAll("button").forEach((x) => (x.disabled = true));
+    try { await api("/api/override", { domain: b.dataset.domain, action: b.dataset.decide }); }
+    catch (err) { alert(err.message); }
+    refreshState(); loadPage();
+  });
+
+  // ---- import a file of links (upstream) ----
+  const IMPORT_KEY = "kashshaf.lastImport";
+  let lastImport = null, importData = null, importKey = "", onlyMistakes = false;
+  try { lastImport = JSON.parse(sessionStorage.getItem(IMPORT_KEY) || "null"); } catch { lastImport = null; }
+  const pct = (x) => (x == null ? "—" : `${Math.round(x * 1000) / 10}%`);
+  async function sendFile(file) {
+    const msg = $("#importMsg"); msg.textContent = ""; msg.className = "msg";
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) { msg.textContent = t("imp.tooBig"); msg.className = "msg err"; return; }
+    msg.textContent = t("imp.uploading", { f: file.name });
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      const r = await api("/api/import", { file_name: file.name, data: btoa(bin) });
+      lastImport = { id: r.import.id, url_column: r.url_column, label_column: r.label_column };
+      try { sessionStorage.setItem(IMPORT_KEY, JSON.stringify(lastImport)); } catch { /* private mode */ }
+      msg.textContent = ""; onlyMistakes = false; importKey = "";
+      await updateImport();
+    } catch (err) { msg.className = "msg err"; msg.textContent = err.message; }
+    $("#importFile").value = "";
+  }
+  $("#importFile").addEventListener("change", (e) => sendFile(e.target.files[0]));
+  { const dz = $("#dropzone");
+    ["dragenter", "dragover"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove("over"); }));
+    dz.addEventListener("drop", (e) => sendFile(e.dataTransfer.files[0])); }
+  async function updateImport() {
+    if (!lastImport) return;
+    const asked = lastImport, data = await api(`/api/import_result?id=${asked.id}`);
+    if (asked !== lastImport) return; // a newer import started meanwhile
+    importData = data;
+    const key = JSON.stringify([data.done, data.rows.map((r) => [r.verdict, r.blocked, r.pending_review]), sort, onlyMistakes, lang]);
+    if (key !== importKey) { importKey = key; renderImport(); }
+  }
+  const wrong = (r) => r.expected && !r.pending && (r.expected === "fraud") !== r.blocked;
+  function renderImport() {
+    const d = importData, b = d.import, m = d.metrics, box = $("#importResult"); box.hidden = false;
+    const at = (r) => (r.checked_at ? Date.parse(r.checked_at) : 0);
+    let rows = d.rows.filter((r) => !onlyMistakes || wrong(r));
+    rows = sort === "risk" ? [...rows].sort((x, y) => (SEV[y.verdict] ?? -2) - (SEV[x.verdict] ?? -2) || (y.score || 0) - (x.score || 0))
+      : [...rows].sort((x, y) => (y.pending - x.pending) || (sort === "old" ? at(x) - at(y) : at(y) - at(x)));
+    const shown = rows.slice(0, 300), done = d.done === d.total;
+    box.innerHTML = `<div class="import-head"><div><b>${esc(b.file_name)}</b>
+        <div class="muted">${esc(t("imp.by", { u: b.imported_by, n: b.total }))}${b.skipped ? esc(t("imp.skipped", { n: b.skipped })) : ""} · ${time(b.at)}
+        · ${esc(t("imp.urlcol", { c: String(lastImport.url_column ?? "—") }))}${lastImport.label_column ? ` · ${esc(t("imp.labelcol", { c: String(lastImport.label_column) }))}` : ""}</div></div>
+        <button class="btn outline sm" id="importExport" type="button">${icon("download")}${esc(t("imp.export"))}</button></div>
+      <div class="meter"><div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="${d.total}" aria-valuenow="${d.done}"><i style="width:${d.total ? (100 * d.done) / d.total : 0}%"></i></div></div>
+      <p class="muted">${done ? esc(t("imp.done")) : esc(t("imp.progress", { d: d.done, n: d.total }))}</p>
+      <div class="import-counts">${VCLASS.map((v) => `<span>${pill(v)} <b class="num">${d.counts[v] || 0}</b></span>`).join("")}<span><span class="blocked">${esc(t("blockedTag"))}</span> <b class="num">${d.blocked}</b></span></div>
+      ${m ? `<div class="metrics">
+        <div class="metric"><b>${pct(m.precision)}</b><span>${esc(t("imp.precision"))}</span><small>${esc(t("imp.precision.d"))}</small></div>
+        <div class="metric"><b>${pct(m.recall)}</b><span>${esc(t("imp.recall"))}</span><small>${esc(t("imp.recall.d"))}</small></div>
+        <div class="metric"><b>${pct(m.f1)}</b><span>${esc(t("imp.f1"))}</span><small>${esc(t("imp.f1.d"))}</small></div>
+        <div class="metric"><b>${pct(m.accuracy)}</b><span>${esc(t("imp.accuracy"))}</span><small>${esc(t("imp.accuracy.d", { n: m.checked }))}</small></div>
+        <div class="metric confusion"><span>${esc(t("imp.tp"))} <b>${m.tp}</b></span><span>${esc(t("imp.fn"))} <b class="bad">${m.fn}</b></span>
+          <span>${esc(t("imp.fp"))} <b class="bad">${m.fp}</b></span><span>${esc(t("imp.tn"))} <b>${m.tn}</b></span></div></div>
+        <label class="check"><input type="checkbox" id="onlyMistakes" ${onlyMistakes ? "checked" : ""}> ${esc(t("imp.mistakes", { n: d.rows.filter(wrong).length }))}</label>` : ""}
+      <div class="import-rows" role="list">${shown.map((r) => `<div class="import-row${wrong(r) ? " is-wrong" : ""}" role="listitem">
+          <span class="muted">#${r.line}</span><span class="url">${esc(r.url || "")}</span>
+          <span>${r.expected ? `<span class="muted">${esc(t("imp.expected"))}</span> ${esc(t("exp." + r.expected))}` : ""}</span>
+          <span>${r.pending ? `<span class="muted"><span class="spin" aria-hidden="true"></span> ${esc(t("imp.checking"))}</span>`
+            : `${pill(r.verdict)} ${r.pending_review ? `<span class="pending">⏳</span>` : r.blocked ? `<span class="blocked">⛔</span>` : ""}`}</span>
+          <span>${r.checked_at ? time(r.checked_at) : ""}</span>
+          ${r.pending ? "<span></span>" : `<button class="btn outline sm" data-open="${r.url_id}" type="button">${esc(t("details"))}</button>`}</div>`).join("")}</div>
+      ${rows.length > shown.length ? `<p class="muted">${esc(t("imp.more", { s: shown.length, n: rows.length }))}</p>` : ""}`;
+    $("#importExport").onclick = exportImport;
+    const om = $("#onlyMistakes"); if (om) om.onchange = () => { onlyMistakes = om.checked; importKey = ""; renderImport(); };
+  }
+  function exportImport() {
+    const cols = ["line", "url", "expected", "verdict", "score", "blocked", "pending_review", "entity_ar", "checked_at"];
+    const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["﻿" + [cols.join(","), ...importData.rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\n")], { type: "text/csv;charset=utf-8" }));
+    a.download = `kashshaf-import-${importData.import.id}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+  }
+
+  // ---- evidence (upstream): screenshot, WHOIS, hosting, hashes; the pack and the printable report ----
+  async function apiRaw(path, body) {
+    const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token || ""}` }, body: body ? JSON.stringify(body) : undefined });
+    if (res.status === 401) { showLogin(); throw new Error(t("err.session")); }
+    if (!res.ok) { let m = res.statusText; try { m = (await res.json()).error || m; } catch { /* not JSON */ } throw new Error(m); }
+    return res;
+  }
+  async function download(path, fallbackName) {
+    const res = await apiRaw(path);
+    const name = ((res.headers.get("Content-Disposition") || "").match(/filename="?([^"]+)"?/) || [])[1] || fallbackName;
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await res.blob()); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  async function loadEvidence(urlId) {
+    const box = $("#evidenceBox"); if (!box) return;
+    let data;
+    try { data = await api(`/api/evidence?url_id=${urlId}`); } catch (err) { box.innerHTML = `<p class="msg err">${esc(err.message)}</p>`; return; }
+    if ($("#evidenceBox") !== box) return; // another link was opened meanwhile
+    const ev = data.items[0], ltr = (x) => `<span dir="ltr">${esc(x)}</span>`, row = (k, v) => (v ? `<tr><th>${esc(t(k))}</th><td>${v}</td></tr>` : "");
+    if (!ev) {
+      box.innerHTML = `<p class="muted">${esc(t("ev.none"))}</p><div class="row"><button class="btn primary sm" id="evCapture" type="button">${esc(t("ev.capture"))}</button>
+        <span id="evMsg" class="muted" role="status">${data.chrome ? "" : esc(t("ev.nochrome"))}</span></div>`;
+    } else {
+      const w = ev.whois || {}, h = ev.hosting || {}, errs = ev.errors || {};
+      box.innerHTML = `<div class="evidence-grid">
+          <div class="evidence-shot">${ev.screenshot_path ? `<img id="evShot" alt="${esc(t("ev.shotAlt"))}">` : `<div class="evidence-noshot">${esc(t("ev.noshot"))}${errs.screenshot ? `<span>${esc(errs.screenshot)}</span>` : ""}</div>`}</div>
+          <table class="evidence-table">${row("ev.at", time(ev.captured_at))}${row("ev.pageTitle", esc(ev.page_title || ""))}
+            ${row("ev.registrar", esc(w.registrar || w.error || w.note || ""))}
+            ${row("ev.created", w.created ? `${ltr(w.created)}${w.age_days != null ? esc(t("ev.age", { n: w.age_days })) : ""}` : "")}
+            ${row("ev.regAbuse", w.abuse_email ? ltr(w.abuse_email) : "")}
+            ${row("ev.hosting", h.ip ? ltr([h.ip, h.as_name || h.owner, h.country].filter(Boolean).join(" · ")) : esc(h.note || ""))}
+            ${row("ev.hostAbuse", h.abuse_email ? ltr(h.abuse_email) : "")}
+            ${row("ev.shotHash", ev.screenshot_sha256 ? `<span class="hash">${esc(ev.screenshot_sha256)}</span>` : "")}
+            ${row("ev.pageHash", ev.html_sha256 ? `<span class="hash">${esc(ev.html_sha256)}</span>` : "")}
+            ${row("ev.missing", errs.page ? esc(t("ev.pageCopy", { e: errs.page })) : "")}</table></div>
+        <div class="row"><button class="btn primary sm" id="evPack" type="button">${icon("download")}${esc(t("ev.pack"))}</button>
+          <button class="btn outline sm" id="evReport" type="button">${esc(t("ev.report"))}</button>
+          <button class="btn outline sm" id="evCapture" type="button">${esc(t("ev.recapture"))}</button><span id="evMsg" class="muted" role="status"></span></div>`;
+      const say = (x) => { const m = $("#evMsg"); if (m) m.textContent = x; };
+      $("#evPack").onclick = () => download(`/api/evidence_pack?url_id=${urlId}`, "kashshaf-evidence.zip").catch((e) => say(e.message));
+      $("#evReport").onclick = async () => {
+        const win = window.open("", "_blank"); // opened inside the click, so no popup blocker
+        try {
+          const res = await apiRaw(`/api/evidence_report?url_id=${urlId}`);
+          const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
+          if (win) { win.location = url; say(t("ev.printHint")); }
+          else { const a = document.createElement("a"); a.href = url; a.download = `kashshaf-report-${urlId}.html`; a.click(); say(t("ev.savedHtml")); }
+        } catch (e) { if (win) win.close(); say(e.message); }
+      };
+      if (ev.screenshot_path) apiRaw(`/api/evidence_file?id=${ev.id}&kind=screenshot`).then((r) => r.blob()).then((b) => { const img = $("#evShot"); if (img) img.src = URL.createObjectURL(b); }).catch(() => {});
+    }
+    $("#evCapture").onclick = async (e) => {
+      e.target.disabled = true; const m = $("#evMsg"); if (m) m.textContent = t("ev.capturing");
+      try { await api("/api/evidence_capture", { url_id: urlId }); } catch (err) { if (m) m.textContent = err.message; e.target.disabled = false; return; }
+      loadEvidence(urlId);
+    };
+  }
+
   /* ---------------- detail dialog ---------------- */
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-open]"); if (b) openDetail(+b.dataset.open); });
   $("#detail").addEventListener("click", (e) => { if (e.target === $("#detail")) $("#detail").close(); });
@@ -607,7 +773,9 @@
           <div><h5>${icon("eye")} ${t("d.scanner")}</h5><b>${esc(bv.title || "")}</b><p dir="auto">${esc((bv.text || bv.error || "").slice(0, 1200))}</p></div></div>
         <h4>${t("d.fp")}</h4><div>${d.fingerprints.map((f) => `<span class="tag u">${esc(f.fingerprints.kind)}: ${esc(f.fingerprints.value)}</span>`).join("") || `<span class="muted">${t("none")}</span>`}</div>
         <h4>${t("d.seen")}</h4><div>${(sort === "old" ? [...d.sightings].reverse() : d.sightings).slice(0, 12).map((x) => `<div class="muted">${src(x.source)}${x.query ? ` · «${esc(x.query)}»` : ""}${x.position ? ` · ${t("d.position", { n: x.position })}` : ""} · ${time(x.seen_at)}</div>`).join("")}</div>
-        <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn outline sm" data-ov="allow" type="button">${t("d.allow")}</button>
+        <h4>${t("ev.title")}</h4><div id="evidenceBox" class="evidence"><p class="muted"><span class="spin"></span> ${t("ev.loading")}</p></div>
+        <div class="row" style="margin-top:16px"><button class="btn danger sm" data-ov="block" type="button">${t("d.block")}</button><button class="btn ok sm" data-ov="allow" type="button">${t("d.allow")}</button>
+          ${v.claimed_entity_id ? `<button class="btn outline sm" data-ov="official" type="button">${t("d.official")}</button>` : ""}
           <button class="btn outline sm" data-ov="" type="button">${t("d.clear")}</button><button class="btn outline sm" id="rescan" type="button">${t("d.rescan")}</button>
           <a class="btn outline sm" href="/blocked?url=${encodeURIComponent(d.url.url)}" target="_blank" rel="noopener">${t("d.warn")}</a></div>
         <p class="msg" id="detailMsg" role="status"></p>
@@ -616,8 +784,10 @@
     $("#closeDetail").onclick = () => $("#detail").close();
     $("#rescan").onclick = async () => { await api("/api/rescan", { url: d.url.url }); $("#detailMsg").textContent = t("d.rescanned"); };
     $$("[data-ov]", $("#detailBody")).forEach((b) => (b.onclick = async () => {
-      await api("/api/override", { domain, action: b.dataset.ov || null }); $("#detailMsg").textContent = t("d.saved"); refreshState(); loadPage();
+      try { await api("/api/override", { domain, action: b.dataset.ov || null }); } catch (err) { $("#detailMsg").textContent = err.message; $("#detailMsg").className = "msg err"; return; }
+      $("#detailMsg").textContent = t("d.saved"); refreshState(); loadPage();
     }));
+    loadEvidence(d.url.id);
   }
 
   /* ---------------- start ---------------- */

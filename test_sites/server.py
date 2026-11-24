@@ -78,6 +78,11 @@ PAGES = {
         '<label>رقم الهاتف</label><input name="phone"><label>رمز التحقق OTP</label><input name="otp">'
         f'<button>استبدال</button><p>للمساعدة: <a href="{GANG_B_WHATSAPP}">واتساب</a></p>', "ar", True),
 
+    # Grey area: uses du's name on a look-alike domain but asks for nothing yet. Suspicious, for analyst review.
+    "du-uae-rewards": lambda mobile: page(
+        "عروض دو | du Rewards", "<h2>شركة دو | du telecom</h2>"
+        "<p>عرض خاص من شركة دو لعملاء الإمارات: 50 جيجابايت مجاناً لمدة شهر. التفعيل قريباً، تابعونا.</p>", "ar", True),
+
     "karak-cafe": lambda mobile: page(
         "Karak Corner", "<h2>Karak Corner, Khalifa City</h2><p>Fresh karak tea, paratha and chips oman. "
         "Open 6am to 2am. Call us or visit us next to the park.</p>"),

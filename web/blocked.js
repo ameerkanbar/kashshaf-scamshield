@@ -4,6 +4,15 @@
   const blocked = params.get("url") || decodeURIComponent(location.hash.slice(1)) || "";
   document.getElementById("url").textContent = blocked || "—";
 
+  // Suspicious, not yet confirmed: blocked as a precaution while an analyst reviews it.
+  if (params.get("review") === "1") {
+    document.querySelector(".badge").textContent = "⏳ صفحة مشبوهة قيد المراجعة";
+    document.getElementById("msg").textContent =
+      "أوقفنا فتح هذه الصفحة احترازياً لأنها مشبوهة، ويراجعها الآن مختصو شرطة أبوظبي. إذا تبيّن أنها آمنة سيُرفع الحظر عنها.";
+    document.querySelector(".en p").textContent =
+      "We stopped this page as a precaution because it looks suspicious. Abu Dhabi Police analysts are reviewing it now; if it proves safe, the block will be lifted.";
+  }
+
   document.getElementById("close").addEventListener("click", function () {
     // Inside the extension we can close the tab directly.
     if (window.chrome && chrome.tabs && chrome.tabs.getCurrent) {
