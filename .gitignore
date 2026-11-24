@@ -12,3 +12,8 @@ __pycache__/
 .DS_Store
 .claude/
 *.log
+
+# Local run: the test login is made on each machine; results and settings are local
+kashshaf-run/emulator_users.json
+kashshaf-run/demo_results.json
+kashshaf-run/local.env

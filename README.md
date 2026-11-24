@@ -20,7 +20,10 @@ precaution, until an analyst reviews them and decides: safe (unblock), official
 | Rules | Two-view fetch, cloaking, registry match, payment/OTP asks, Telegram exfil, domain age | `kashshaf/rules.py` |
 | Claude agent | Tools: `fetch_page`, `view_page` (screenshot of the page beside the official site, so it reads text hidden in images and rates the visual similarity), `lookup_official_entity`, `domain_registration`, `web_search`, `submit_verdict`. When the AI service is busy, the rules give a provisional verdict and the link is checked again after 5, 15 and 30 minutes | `kashshaf/agent.py` |
 | Server | Analyst dashboard (Supabase login, Arabic/English), API, safe-link gateway, warning page | `server.py`, `web/` |
-| Dashboard | Home is the operations room: live radar, discover → check → verdict → block pipeline, one tile per agent, live feed, and charts from `/api/insights` | `web/index.html`, `web/assets/app.js`, `web/assets/i18n.js` |
+| Dashboard | Arabic/English, responsive, menu on the right. Home is the operations room: live radar, discover → check → verdict → block pipeline, live feed, charts. Pages: agent company and its live office view, analytics, check a message or link (with file import, History and New session), results, review queue, blocked sites, gangs, official registry, discovery, agents, audit log, settings. Loading shows shimmer skeletons; tables never scroll sideways (long text is shortened, rows become cards on narrow screens) | `web/index.html`, `web/assets/app.js`, `web/assets/i18n.js`, `web/assets/app.css` |
+| Settings and keys | Live status of every connected service (Supabase, Claude, SerpAPI, crt.sh, OpenPhish, RDAP, other machines on the same database) with a test button each; «إدارة المفاتيح» edits every key and setting in `.env` with free connection tests; a first-run setup page when no keys exist | `kashshaf/health.py`, `kashshaf/envfile.py`, `web/assets/keys.js`, `web/setup.html` |
+| Official registry | The official bodies, their domains and their official phone numbers, each with the page on the body's own site it was read on | `kashshaf/phones.py`, `supabase/migrations/0013_official_phones.sql` |
+| Fake support lines | Google Maps places named like an official body with a number that is not theirs | `kashshaf/phones.py` |
 | Extension | Redirects blocked domains to the warning page | `extension/` |
 | Evidence | Screenshot, page copy, WHOIS/RDAP, hosting, SHA-256 hashes; evidence pack and takedown draft | `kashshaf/evidence.py` |
 | HQ game | `/hq`: a walkable 2D headquarters in Abu Dhabi Police colours. Each room is one dashboard tab (press Space at the officer); the detention cells hold the blocked sites, grouped by the kind of body they impersonate | `web/hq.html`, `web/assets/hq/` |
@@ -109,6 +112,39 @@ phishing / legitimate, 1 / 0, احتيال / سليم), the page shows precision
 "flagged" means blocked for the public (fraud, or suspicious pending review). Results export to CSV.
 For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claude investigation.
 
+- **Agents off? The file still runs.** If the agents are stopped when a file comes in, they are started for it
+  and stopped again once every link is checked. Pressing start or stop meanwhile overrides this; if they were
+  already on, an import never touches them.
+- **Dead, IP and decoy@ links.** Most links in public phishing lists are dead by the time they are checked. A
+  link that does not open is judged from the link and its domain name alone: imitation of an official body or
+  of a widely phished brand (PayPal, Apple, Microsoft, DHL...) on a domain that is not theirs, a bare IP
+  address, a fake host before `@`, punycode, lure words and throwaway endings. With such a name it is
+  suspicious and blocked until reviewed (never "fraud" without seeing the page); a dead ordinary link stays
+  "unreachable". Bare-IP links and `decoy@host` links are read from the file and opened at the real host.
+- **New session and History.** When a file is fully checked, «جلسة جديدة» clears the screen for the next one.
+  «السجل» lists every file ever uploaded; «عرض» brings any of them back with all its results. Nothing is deleted.
+
+## Running it locally without paid services
+
+`kashshaf-run/` holds a local Supabase emulator (PostgREST, auth, storage and the views, in memory), the
+end-to-end tests and a demo. Nothing there calls Claude or SerpAPI.
+
+```bash
+python kashshaf-run/supabase_emulator.py .          # Supabase on http://localhost:54321 (test login in kashshaf-run/emulator_users.json, made on first run)
+python test_sites/server.py                         # local TEST scam pages on :8081
+KASHSHAF_ENV_FILE=kashshaf-run/local.env python server.py --port 8095 --agents 15
+python kashshaf-run/test_merge.py                   # end to end: verdicts, review, evidence, import, settings
+KASHSHAF_ENV_FILE=kashshaf-run/local.env python kashshaf-run/test_fake_phones.py
+python kashshaf-run/test_import_auto.py             # import with agents off, dead / IP / @ links
+```
+
+`kashshaf-run/local.env.example` has the emulator's settings: copy it to `kashshaf-run/local.env`.
+
+## Other material
+
+- `report/`: the analysis of the original repository (PDF and HTML).
+- `game-design/`: the HQ game design mockups (the game itself is at `/hq`).
+
 ## Settings (.env)
 
 | Setting | Default | Meaning |
@@ -126,7 +162,8 @@ For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claud
 | `RECHECK_AFTER_HOURS` | 24 | A pasted link checked within this window is answered from the database |
 | `ALLOW_LOCAL_TEST_SITES` | true | Allow `*.localhost` test pages. Set to false in production |
 | `EVIDENCE_AUTO` | true | Capture evidence automatically for fraud and suspicious links (at most 2 at a time, once per link every 6 hours) |
-| `CHROME_PATH` | auto | Chrome or Chromium used for screenshots; found automatically on macOS and Linux |
+| `CHROME_PATH` | auto | Chrome, Chromium or Edge used for screenshots; found automatically on macOS, Linux and Windows |
+| `KASHSHAF_ENV_FILE` | `.env` | Read the settings from another file (a second instance on the same machine, a deployment) |
 | `UAEPASS_BASE_URL` | empty | Empty = the built-in simulation. UAE PASS staging: `https://stg-id.uaepass.ae/idshub` |
 | `UAEPASS_CLIENT_ID`, `UAEPASS_CLIENT_SECRET` | simulation values | The client credentials UAE PASS issues to the police |
 | `ANALYST_EMAIL_DOMAINS` | adpolice.gov.ae | Email domains allowed to log in as analysts with UAE PASS |
@@ -152,3 +189,5 @@ For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claud
 - Agents only read pages; they never submit forms.
 - The registry domains are marked `verified = false` until confirmed with each entity.
 - The warning page uses a generic shield, not the official police crest (needs permission).
+- Secret keys entered in Settings are written to `.env` on the server and never sent back to the browser; the
+  first-run setup page answers only on the computer running Kashshaf (loopback, Host and Origin checked).

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>تحليل مشروع كشّاف</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+  :root { --navy:#0B2A5B; --blue:#135BA6; --ink:#1d2939; --muted:#5b6575; --line:#e3e7ee; --red:#B42318; --green:#067647; --amber:#B54708; --soft:#f4f6fa; }
+  * { box-sizing:border-box; }
+  body { font-family:"Segoe UI","Tahoma",sans-serif; color:var(--ink); font-size:10.5pt; line-height:1.75; margin:0; }
+  h1 { font-size:26pt; color:var(--navy); margin:0 0 6px; }
+  h2 { font-size:15pt; color:var(--navy); border-bottom:2px solid var(--blue); padding-bottom:4px; margin:22px 0 10px; page-break-after:avoid; }
+  h3 { font-size:12pt; color:var(--blue); margin:14px 0 6px; page-break-after:avoid; }
+  p { margin:0 0 8px; }
+  code, .mono { font-family:Consolas,"Courier New",monospace; font-size:9pt; direction:ltr; unicode-bidi:embed; background:var(--soft); padding:0 3px; border-radius:3px; }
+  table { width:100%; border-collapse:collapse; margin:6px 0 12px; font-size:9.5pt; page-break-inside:auto; }
+  tr { page-break-inside:avoid; }
+  th { background:var(--navy); color:#fff; text-align:right; padding:5px 7px; font-weight:600; }
+  td { border-bottom:1px solid var(--line); padding:5px 7px; vertical-align:top; }
+  tr:nth-child(even) td { background:#fafbfd; }
+  .cover { height:250mm; display:flex; flex-direction:column; justify-content:center; page-break-after:always; }
+  .cover .tag { color:var(--blue); font-weight:700; letter-spacing:.5px; }
+  .cover .sub { font-size:13pt; color:var(--muted); margin-top:4px; }
+  .cover .meta { margin-top:40px; border-top:1px solid var(--line); padding-top:14px; color:var(--muted); font-size:10pt; }
+  .box { background:var(--soft); border-right:4px solid var(--blue); padding:10px 14px; border-radius:4px; margin:8px 0 12px; }
+  .box.warn { border-color:var(--amber); background:#fffaf2; }
+  .box.ok { border-color:var(--green); background:#f3fbf6; }
+  .kpis { display:flex; gap:8px; margin:10px 0; }
+  .kpi { flex:1; border:1px solid var(--line); border-radius:6px; padding:8px; text-align:center; }
+  .kpi b { display:block; font-size:18pt; color:var(--navy); line-height:1.2; }
+  .kpi span { font-size:8.5pt; color:var(--muted); }
+  .v { font-weight:700; padding:1px 8px; border-radius:10px; font-size:8.5pt; white-space:nowrap; }
+  .v.fraud { background:#fee4e2; color:var(--red); } .v.official { background:#e0eaff; color:var(--blue); } .v.safe { background:#dcfae6; color:var(--green); }
+  figure { margin:8px 0 14px; page-break-inside:avoid; text-align:center; }
+  figure img { width:100%; border:1px solid var(--line); border-radius:6px; }
+  figcaption { font-size:9pt; color:var(--muted); margin-top:4px; }
+  .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:stretch; margin:8px 0 12px; }
+  .flow div { flex:1 1 0; min-width:90px; background:#fff; border:1.5px solid var(--blue); border-radius:6px; padding:6px; font-size:9pt; text-align:center; }
+  .flow div b { display:block; color:var(--navy); font-size:9.5pt; }
+  .arrow { flex:0 0 auto !important; min-width:0 !important; border:0 !important; color:var(--blue); font-size:14pt; padding:6px 0 !important; }
+  .sev { font-weight:700; } .sev.h { color:var(--red); } .sev.m { color:var(--amber); } .sev.l { color:var(--muted); }
+  .break { page-break-before:always; }
+  ul { margin:4px 0 10px; padding-right:20px; } li { margin:2px 0; }
+  .ltr { direction:ltr; text-align:left; }
+</style>
+</head>
+<body>
+
+<section class="cover">
+  <div class="tag">تحليل تقني كامل · Technical Analysis</div>
+  <h1>كشّاف · Kashshaf</h1>
+  <div class="sub">منصة رصد روابط ومواقع الاحتيال الإلكتروني (نموذج أولي لشرطة أبوظبي)</div>
+  <div class="sub mono" style="background:none">github.com/ameerkanbar/kashshaf</div>
+  <div class="kpis" style="margin-top:30px">
+    <div class="kpi"><b>37</b><span>ملف</span></div>
+    <div class="kpi"><b>3,836</b><span>سطر كود</span></div>
+    <div class="kpi"><b>1</b><span>commit</span></div>
+    <div class="kpi"><b>1</b><span>مكتبة خارجية (anthropic)</span></div>
+  </div>
+  <div class="meta">
+    تم استنساخ المستودع وقراءة كل ملف، ثم تشغيل النظام كاملاً محلياً (السيرفر، 8 وكلاء، مواقع الاحتيال التجريبية، لوحة المحللين، غرفة العمليات، صفحة التحذير، البوابة الآمنة) وتمرير بيانات التجربة الموجودة في المستودع عبره.<br>
+    التاريخ: 24/11/2026
+  </div>
+</section>
+
+<h2>1. الخلاصة</h2>
+<p><b>كشّاف</b> نظام يبحث عن روابط الاحتيال التي تستهدف سكان الإمارات (مخالفات مرور مزيفة، استرداد أموال مزيف، طرود أرامكس، نقاط اتصالات...)، يفحص كل رابط بطريقتين (كهاتف إماراتي وكأداة فحص) ليكشف المواقع التي <b>تخفي نفسها</b>، يقارن الموقع بسجل الجهات الرسمية، يعطيه درجة خطورة بقواعد واضحة، ثم (اختيارياً) يرسله لوكيل Claude يحقق فيه بأدوات حقيقية. المواقع المحتالة تُحظر، ومن يفتحها يرى صفحة تحذير باسم شرطة أبوظبي.</p>
+<div class="box ok"><b>نتيجة التشغيل:</b> النظام اشتغل من أوله لآخره. الروابط العشرة في ملف التجربة <span class="mono">data/seeds.json</span> صُنّفت كلها صح: 5 احتيال (كلها انحظرت)، 4 رسمية، 1 آمن (مقهى كرك). كشف موقع TAMM المخفي (الهاتف يرى صفحة استرداد مزيفة، والفاحص يرى مدونة طبخ)، وربط المواقع في <b>عصابتين</b> عن طريق بوت تيليجرام ورقم واتساب مشتركين.</div>
+<div class="box warn"><b>ما لم يُشغَّل بخدمات حقيقية:</b> لا يوجد في المستودع مفتاح Supabase السري ولا مفتاح Claude ولا مفتاح SerpAPI. لذلك كتبتُ <b>محاكي Supabase محلي</b> (قاعدة بيانات + تسجيل دخول) يشغّل كود المشروع بدون أي تعديل عليه، واختبرت حلقة وكيل Claude بعميل وهمي. بحث جوجل لم يُشغَّل (يحتاج مفتاح مدفوع)، ولم أشغّل الدورية على مصادر الإنترنت الحقيقية حتى لا يفتح الوكلاء صفحات تصيّد حقيقية.</div>
+
+<h2>2. المعمارية</h2>
+<div class="flow">
+  <div><b>الاكتشاف</b>جوجل، إعلانات، ملخص AI، خرائط، سجلات الشهادات، OpenPhish، رسائل ملصوقة</div>
+  <div class="arrow">←</div>
+  <div><b>طابور الروابط</b>جدول urls في Postgres، الأولوية أولاً</div>
+  <div class="arrow">←</div>
+  <div><b>مجموعة الوكلاء</b>50 خيط (thread) يأخذ كل واحد رابطاً عبر claim_url</div>
+  <div class="arrow">←</div>
+  <div><b>خط الفحص</b>سجل رسمي ← فتح بطريقتين ← قواعد ← Claude</div>
+  <div class="arrow">←</div>
+  <div><b>الحكم والحظر</b>verdicts، domains، blocklist</div>
+  <div class="arrow">←</div>
+  <div><b>الحماية</b>إضافة المتصفح، /go، /api/check، صفحة التحذير</div>
+</div>
+<table>
+  <tr><th style="width:22%">الطبقة</th><th style="width:28%">الملفات</th><th>الدور</th></tr>
+  <tr><td>قاعدة البيانات</td><td class="mono">supabase/migrations/0001–0006</td><td>Postgres على Supabase: 14 جدول + 5 views + دالة claim_url. كل الجداول عليها RLS بدون سياسات عامة، فلا يلمسها إلا السيرفر بالمفتاح السري.</td></tr>
+  <tr><td>عميل قاعدة البيانات</td><td class="mono">kashshaf/supa.py</td><td>عميل PostgREST و Auth مكتوب بالمكتبة القياسية فقط (بدون supabase-py). يتحقق من توكن المحلل ويحفظه 60 ثانية.</td></tr>
+  <tr><td>منطق البيانات</td><td class="mono">kashshaf/store.py</td><td>كل القراءة والكتابة: السجل الرسمي (مخزّن مؤقتاً دقيقة)، الطابور، حفظ النتائج، حالة النطاق، العصابات، سجل العمليات، ذاكرة البحث.</td></tr>
+  <tr><td>الاكتشاف</td><td class="mono">kashshaf/discovery.py</td><td>بحث جوجل عبر SerpAPI كـ«ساكن في أبوظبي على الهاتف»، سجلات crt.sh، قائمة OpenPhish مفلترة على العلامات الإماراتية.</td></tr>
+  <tr><td>الجلب</td><td class="mono">kashshaf/fetcher.py</td><td>يفتح الصفحة مرتين: كـ iPhone وكـ HeadlessChrome. يرفض العناوين الداخلية. لا يرسل أي نموذج.</td></tr>
+  <tr><td>القواعد</td><td class="mono">kashshaf/rules.py</td><td>محرك نقاط قابل للشرح: كل إشارة تضيف نقاطاً مع سبب بالعربي والإنجليزي.</td></tr>
+  <tr><td>وكيل Claude</td><td class="mono">kashshaf/agent.py</td><td>حلقة أدوات حتى 8 أدوار؛ ينتهي باستدعاء submit_verdict.</td></tr>
+  <tr><td>خط الفحص</td><td class="mono">kashshaf/pipeline.py</td><td>يقرر مسار كل رابط ويحفظ النتيجة.</td></tr>
+  <tr><td>الوكلاء</td><td class="mono">kashshaf/workers.py</td><td>Pool من الخيوط، يتغير حجمه وهو يعمل (1–500)، مع تهدئة تدريجية عند فراغ الطابور.</td></tr>
+  <tr><td>التحكم</td><td class="mono">kashshaf/control.py</td><td>تشغيل/إيقاف، حدود الصرف بالساعة، حلقة الدورية المستمرة.</td></tr>
+  <tr><td>السيرفر</td><td class="mono">server.py</td><td>HTTP server بالمكتبة القياسية: صفحات، API للمحللين، API عام، بوابة الروابط.</td></tr>
+  <tr><td>الواجهة</td><td class="mono">web/</td><td>لوحة المحللين (8 تبويبات)، غرفة العمليات (مدرّج SVG)، صفحة التحذير، جولة تعريفية.</td></tr>
+  <tr><td>الإضافة</td><td class="mono">extension/</td><td>إضافة Chrome (MV3) تسحب قائمة الحظر كل 30 ثانية وتحوّل النطاقات المحظورة لصفحة التحذير.</td></tr>
+  <tr><td>مواقع تجريبية</td><td class="mono">test_sites/server.py</td><td>6 صفحات احتيال محاكاة على <span class="mono">*.localhost:8081</span>، فيها بصمات مشتركة لتظهر العصابات.</td></tr>
+</table>
+
+<h2>3. رحلة الرابط خطوة بخطوة (pipeline.inspect)</h2>
+<table>
+  <tr><th style="width:5%">#</th><th style="width:25%">الخطوة</th><th>ماذا يحدث</th></tr>
+  <tr><td>1</td><td>نطاق رسمي؟</td><td>إذا كان النطاق (أو نطاق فرعي منه) في <span class="mono">official_domains</span> يصير الحكم <span class="v official">رسمي</span> فوراً، بدون جلب.</td></tr>
+  <tr><td>2</td><td>نطاق حكومي محمي؟</td><td><span class="mono">gov.ae</span> و <span class="mono">mil.ae</span> و <span class="mono">.abudhabi</span> لا تسجّلها إلا جهات حكومية، فالحكم رسمي.</td></tr>
+  <tr><td>3</td><td>محظور مسبقاً؟</td><td>رابط جديد على نطاق محظور يأخذ حكم <span class="v fraud">احتيال</span> من قاعدة البيانات مباشرة، بلا جلب وبلا Claude (توفير).</td></tr>
+  <tr><td>4</td><td>جلب بطريقتين</td><td>iPhone مقابل HeadlessChrome. إذا فشل الاثنان يصير الحكم «تعذّر الفتح».</td></tr>
+  <tr><td>5</td><td>القواعد</td><td><span class="mono">rules.evaluate</span> يحسب الدرجة (0–100) والأسباب والبصمات. 60+ احتيال، 30+ مشبوه، أقل من ذلك آمن.</td></tr>
+  <tr><td>6</td><td>وكيل Claude</td><td>إذا كان المفتاح موجوداً والدرجة ≥ <span class="mono">AGENT_MIN_RULE_SCORE</span> وفي رصيد بالساعة، يحقق Claude ويستبدل حكم القواعد بحكمه، وتُضاف أسبابه وملخصه.</td></tr>
+  <tr><td>7</td><td>الحفظ</td><td><span class="mono">scans</span> و <span class="mono">verdicts</span> والبصمات، ثم يأخذ النطاق <b>أسوأ حكم حالي</b> بين روابطه. المنصات المشتركة (فيسبوك، X، تيليجرام...) لا تُحظر كاملة، أقصاها «مشبوه».</td></tr>
+</table>
+
+<h3>محرك القواعد: جدول النقاط</h3>
+<table>
+  <tr><th style="width:10%">نقاط</th><th>الإشارة</th><th style="width:38%">الشرط</th></tr>
+  <tr><td>+30</td><td>إخفاء (Cloaking)</td><td>تشابه النسختين أقل من 45%، ونسخة الهاتف فيها نموذج بطاقة أو هوية، ونسخة الفاحص نظيفة وحالتها 200 وليست صفحة حماية.</td></tr>
+  <tr><td>+40</td><td>ينتحل جهة رسمية</td><td>العنوان يذكر الجهة أو اسم النطاق يقلدها، ومعه نموذج حساس أو إخفاء أو نطاق مقلّد.</td></tr>
+  <tr><td>+20</td><td>النطاق يقلد اسم الجهة</td><td>مثل <span class="mono">adpolice-fines-pay</span>.</td></tr>
+  <tr><td>+25 / +10</td><td>نموذج بطاقة / طلب دفع باسم الجهة</td><td>حقول card / cvv / expiry / iban...</td></tr>
+  <tr><td>+15 / +10</td><td>نموذج OTP أو هوية / كلمة مرور باسم الجهة</td><td>otp، emirates id، uae pass...</td></tr>
+  <tr><td>+10</td><td>ضغط واستعجال</td><td>«خلال 24 ساعة»، «تنتهي اليوم»، «حجز المركبة»...</td></tr>
+  <tr><td>+20</td><td>بوت تيليجرام</td><td>توكن بوت في كود الصفحة (البيانات المسروقة تُرسل له).</td></tr>
+  <tr><td>+15</td><td>نطاق جديد</td><td>مسجّل قبل أقل من 30 يوماً (RDAP)، مع وجود إشارة أخرى.</td></tr>
+</table>
+<p><b>البصمات</b> التي تربط المواقع ببعض (العصابات): توكن بوت تيليجرام، رابط t.me، رقم wa.me، IBAN إماراتي، رقم جوال +9715، معرّف Google Analytics / GTM. أي موقعين احتيال أو مشبوهين يتشاركان بصمة يُدمجان في عصابة واحدة (union).</p>
+
+<h3>وكيل Claude</h3>
+<p>نموذج <span class="mono">claude-opus-5-5</span> بجهد <span class="mono">medium</span> ومع fallback من جهة السيرفر. يستلم أدلة القواعد والنسختين، وعنده 5 أدوات:</p>
+<table>
+  <tr><th style="width:28%">الأداة</th><th>الوظيفة</th></tr>
+  <tr><td class="mono">fetch_page</td><td>يفتح أي رابط كهاتف أو كفاحص، ويرجع العنوان والنص والحقول والبصمات.</td></tr>
+  <tr><td class="mono">lookup_official_entity</td><td>يبحث في السجل الرسمي بالاسم أو النطاق.</td></tr>
+  <tr><td class="mono">domain_registration</td><td>تاريخ تسجيل النطاق من RDAP.</td></tr>
+  <tr><td class="mono">web_search</td><td>بحث جوجل (مخزّن أسبوعاً في جدول searches).</td></tr>
+  <tr><td class="mono">submit_verdict</td><td>الحكم النهائي (strict schema): احتيال/مشبوه/آمن، درجة، الجهة المنتحلة، أسباب وملخص بالعربي والإنجليزي.</td></tr>
+</table>
+
+<h3>التحكم في التكلفة والذاكرة</h3>
+<ul>
+  <li>حد بحث جوجل بالساعة (20) وحد تحقيقات Claude بالساعة (60). بعد الحد تحكم القواعد وحدها.</li>
+  <li>نفس البحث لا يُعاد خلال 24 ساعة، وبحث الوكيل يُخزن أسبوعاً، ورابط ملصوق فُحص خلال 24 ساعة يُجاب من القاعدة.</li>
+  <li>HTTP 429 من SerpAPI يوقف البحث ساعة كاملة.</li>
+  <li><b>الدورية المستمرة:</b> كل 90 ثانية تختار بحثاً عشوائياً لشخصية افتراضية (persona)، وكل جولة رابعة تأخذ من المصادر المجانية.</li>
+</ul>
+
+<h2>4. قاعدة البيانات</h2>
+<table>
+  <tr><th style="width:24%">الجدول / View</th><th>المحتوى</th></tr>
+  <tr><td class="mono">entities · official_domains · official_phones</td><td>السجل الرسمي: 17 جهة (شرطة أبوظبي، تم، سالك، أرامكس، اتصالات، البنوك...) و18 نطاقاً رسمياً، كلها <span class="mono">verified=false</span>.</td></tr>
+  <tr><td class="mono">personas</td><td>سكان افتراضيون بلغة وحاجة وقائمة بحث. <b>لا يُملأ في أي migration</b>.</td></tr>
+  <tr><td class="mono">messages · urls · url_sightings</td><td>الرسائل الملصوقة، طابور الروابط (queued/checking/done/error)، وكل مرة ظهر فيها الرابط ومن أي مصدر وفي أي ترتيب.</td></tr>
+  <tr><td class="mono">scans · verdicts</td><td>نسختا الصفحة ونسبة التشابه والإخفاء؛ والحكم والدرجة والأسباب وتحليل AI والنموذج.</td></tr>
+  <tr><td class="mono">fingerprints · url_fingerprints</td><td>البصمات وربطها بالروابط.</td></tr>
+  <tr><td class="mono">domains</td><td>حالة كل نطاق + قرار المحلل اليدوي (block/allow) + تاريخ الحظر.</td></tr>
+  <tr><td class="mono">searches · audit_log</td><td>ذاكرة البحث المدفوع، وسجل كل العمليات.</td></tr>
+  <tr><td class="mono">findings · blocklist · blocked_list · shared_indicators · search_hits</td><td>Views: آخر حكم لكل رابط، قائمة الحظر، المحظورة مع الإحصاءات، البصمات المشتركة، وكم رابطاً خطيراً أظهرته كل عبارة بحث.</td></tr>
+  <tr><td class="mono">claim_url()</td><td>يأخذ الرابط التالي بـ <span class="mono">FOR UPDATE SKIP LOCKED</span>، فلا يفحص وكيلان نفس الرابط حتى لو كانوا على أجهزة مختلفة. بعد 3 محاولات عالقة يصير «error».</td></tr>
+</table>
+
+<h2>5. الواجهات والـ API</h2>
+<h3>لوحة المحللين (/)</h3>
+<p>تسجيل دخول Supabase، ثم 8 تبويبات: لوحة المتابعة (8 مؤشرات + آخر المحظورة + العصابات)، فحص رسالة أو رابط، النتائج (بحث وفلترة)، المحظورة (مع تصدير CSV)، العصابات، الاكتشاف (بحث جوجل يدوي + المصادر + سجل البحث)، الوكلاء (العدد، تشغيل/إيقاف، الاستهلاك)، والسجل. ترتيب موحّد لكل القوائم (الأحدث / الأقدم / الأخطر). تتحدث كل 3 ثوانٍ، وفيها جولة تعريفية من 10 خطوات.</p>
+<figure><img src="img/dashboard.jpg"><figcaption>لوحة المتابعة بعد تشغيل بيانات التجربة: 10 روابط، 5 محظورة، موقع واحد يخفي نفسه، عصابتان</figcaption></figure>
+<figure><img src="img/detail.jpg"><figcaption>نافذة الأدلة لموقع TAMM المزيف: الأسباب مع نقاطها، و«ما يراه الهاتف مقابل ما تراه أداة الفحص» (صفحة استرداد مقابل مدونة طبخ)</figcaption></figure>
+<h3 class="break">غرفة العمليات (/room)</h3>
+<p>شاشة عرض كبيرة: مؤشرات، شريط آخر ما فعلته الدورية، آخر 10 أحكام، ومدرّج SVG يُرسم فيه كل وكيل كشخص أمام شاشة. لون المقعد حسب الحالة: يفحص / ينتظر / وجد احتيالاً (يتوهج أحمر 8 ثوانٍ) / متوقف. وفيها أزرار الدورية المستمرة وإيقاف كل الوكلاء وعدّادات الصرف.</p>
+<figure><img src="img/room.jpg"><figcaption>غرفة العمليات مع 8 وكلاء</figcaption></figure>
+<h3>صفحة التحذير (/blocked)</h3>
+<figure style="width:70%;margin-inline:auto"><img src="img/blocked.jpg"><figcaption>ما يراه الشخص عند فتح رابط محظور (عبر البوابة أو الإضافة)</figcaption></figure>
+
+<h3>نقاط الـ API</h3>
+<table>
+  <tr><th style="width:30%">المسار</th><th style="width:12%">الوصول</th><th>الوظيفة</th></tr>
+  <tr><td class="mono">GET /api/blocklist</td><td>عام</td><td>قائمة النطاقات المحظورة (للإضافة أو DNS أو مزودي الإنترنت).</td></tr>
+  <tr><td class="mono">GET /api/check?url=</td><td>عام</td><td>استعلام للبنوك والتطبيقات: رسمي / محظور / غير معروف.</td></tr>
+  <tr><td class="mono">GET /go?url=</td><td>عام</td><td>البوابة الآمنة: تفحص النطاق المجهول فوراً، ثم تحوّل للموقع أو لصفحة التحذير.</td></tr>
+  <tr><td class="mono">GET /api/state · findings · finding · blocked · gangs · searches · audit · registry · scan_result</td><td>محلل</td><td>قراءات اللوحة.</td></tr>
+  <tr><td class="mono">POST /api/scan · discover · control · agents · override · rescan</td><td>محلل</td><td>فحص نص، تشغيل اكتشاف، تشغيل/إيقاف/دورية، حجم الوكلاء، حظر/سماح يدوي، إعادة فحص.</td></tr>
+</table>
+
+<h2>6. كيف شغّلته والنتائج</h2>
+<table>
+  <tr><th style="width:5%">#</th><th>الخطوة</th></tr>
+  <tr><td>1</td><td>استنساخ المستودع وإنشاء venv بـ Python 3.12 وتثبيت <span class="mono">anthropic 2.13.0</span> (تأكدت أنه يدعم <span class="mono">fallbacks</span> و <span class="mono">output_config</span> و <span class="mono">betas</span>).</td></tr>
+  <tr><td>2</td><td>كتابة <span class="mono">supabase_emulator.py</span>: محاكي في الذاكرة لـ PostgREST (فلاتر eq/in/is/gte/ilike/or، ترتيب، عدّ، upsert) ولدالة claim_url وللـ views الخمسة ولتسجيل الدخول. يقرأ السجل الرسمي من ملف migration نفسه.</td></tr>
+  <tr><td>3</td><td>تشغيل المحاكي (54321) ومواقع الاحتيال التجريبية (8081) وسيرفر كشّاف بـ 8 وكلاء (8080). كود المشروع لم يُعدَّل، فقط ملف <span class="mono">.env</span>.</td></tr>
+  <tr><td>4</td><td><span class="mono">run_demo.py</span>: يسجل الدخول ويرسل كل رسائل وروابط <span class="mono">seeds.json</span> عبر <span class="mono">/api/scan</span> وينتظر الأحكام.</td></tr>
+  <tr><td>5</td><td>اختبار البوابة <span class="mono">/go</span> و <span class="mono">/api/check</span>، وفتح اللوحة وغرفة العمليات وصفحة التحذير في المتصفح.</td></tr>
+  <tr><td>6</td><td>اختبار حلقة وكيل Claude بعميل وهمي: نفّذ <span class="mono">lookup_official_entity</span> و <span class="mono">fetch_page</span> فعلياً، وأرجع النتائج، وقصّ الدرجة 140 إلى 100، وحوّل <span class="mono">reasons_ar</span> المرسلة كنص إلى قائمة.</td></tr>
+</table>
+<table>
+  <tr><th>الرابط</th><th style="width:11%">الحكم</th><th style="width:7%">الدرجة</th><th style="width:38%">الأسباب الرئيسية</th></tr>
+  <tr><td class="mono">adpolice-fines-pay.localhost/pay</td><td><span class="v fraud">احتيال</span></td><td>100</td><td>ينتحل شرطة أبوظبي، نطاق مقلّد، نموذج بطاقة، استعجال، بوت تيليجرام</td></tr>
+  <tr><td class="mono">tamm-refund-uae.localhost/claim</td><td><span class="v fraud">احتيال</span></td><td>100</td><td><b>إخفاء (تشابه 27%)</b>، ينتحل تم، بطاقة + هوية، بوت تيليجرام</td></tr>
+  <tr><td class="mono">consumer-protection-refund.localhost</td><td><span class="v fraud">احتيال</span></td><td>100</td><td>ينتحل حماية المستهلك، بطاقة، بوت تيليجرام</td></tr>
+  <tr><td class="mono">aramex-redelivery.localhost/track</td><td><span class="v fraud">احتيال</span></td><td>95</td><td>ينتحل أرامكس، بطاقة، استعجال</td></tr>
+  <tr><td class="mono">etisalat-points.localhost/redeem</td><td><span class="v fraud">احتيال</span></td><td>85</td><td>ينتحل اتصالات، OTP، استعجال</td></tr>
+  <tr><td class="mono">karak-cafe.localhost</td><td><span class="v safe">آمن</span></td><td>0</td><td>لا إشارات</td></tr>
+  <tr><td class="mono">adpolice.gov.ae · tamm.abudhabi · u.ae · aramex.com</td><td><span class="v official">رسمي</span></td><td>0</td><td>نطاقات مسجلة في السجل الرسمي</td></tr>
+</table>
+<p><b>العصابات:</b> عصابة 1 (3 مواقع: شرطة، تم، حماية المستهلك) عبر نفس بوت تيليجرام. عصابة 2 (أرامكس، اتصالات) عبر نفس رقم واتساب. <b>البوابة:</b> رابط TAMM ← صفحة التحذير، والرابط الرسمي والمقهى ← يفتحان عادي.</p>
+
+<h2>7. ملاحظات ونقاط ضعف وجدتها</h2>
+<table>
+  <tr><th style="width:9%">الأهمية</th><th style="width:26%">الملاحظة</th><th>التفصيل</th></tr>
+  <tr><td class="sev h">عالية</td><td>تجاوز حماية العناوين الداخلية عبر التحويل (SSRF)</td><td><span class="mono">fetcher._public_host</span> يفحص النطاق الأول فقط، لكن <span class="mono">urllib</span> يتبع التحويلات (302) تلقائياً. صفحة عامة تحوّل إلى <span class="mono">127.0.0.1</span> أو عنوان داخلي تُفتح. والمسار <span class="mono">/go</span> عام، فأي شخص يستطيع تشغيله. (أيضاً DNS rebinding بين الفحص والاتصال.) <i>من قراءة الكود، لم أجربه على سيرفر عام.</i></td></tr>
+  <tr><td class="sev h">عالية</td><td>/go عام ويصرف</td><td>كل نطاق مجهول عبر <span class="mono">/go</span> يُجلب ويُفحص فوراً (ومعه Claude إذا كانت الدرجة ≥ 1) بلا تسجيل دخول وبلا حد للطلبات. يمكن استنزاف رصيد Claude بالساعة وتعطيل التحقيقات الحقيقية.</td></tr>
+  <tr><td class="sev m">متوسطة</td><td>جدول personas فارغ</td><td>لا يوجد migration يملأ الشخصيات، فزر «تشغيل كل السكان الافتراضيين» والدورية لا يبحثان في جوجل أبداً حتى مع مفتاح SerpAPI، والدورية تعمل على المصادر المجانية فقط.</td></tr>
+  <tr><td class="sev m">متوسطة</td><td>الحدود في الذاكرة</td><td>README يقول إن الوكلاء آمنون على عدة أجهزة (صحيح للطابور)، لكن حدود الصرف بالساعة وحالة التشغيل في ذاكرة كل عملية، فكل جهاز يصرف حده كاملاً.</td></tr>
+  <tr><td class="sev m">متوسطة</td><td>بحث النتائج ينكسر بالفاصلة</td><td><span class="mono">store.findings</span> يدخل نص البحث في فلتر <span class="mono">or=(...)</span> بدون تهريب، فالبحث عن نص فيه <span class="mono">,</span> أو <span class="mono">)</span> يرجع خطأ 400.</td></tr>
+  <tr><td class="sev l">منخفضة</td><td>RDAP في كل فحص</td><td><span class="mono">domain_created</span> يطلب rdap.org حتى مرتين (8 ثوانٍ لكل واحدة) لكل رابط بدون تخزين، فيبطّئ الوكلاء وقد يتعرض لحد الطلبات.</td></tr>
+  <tr><td class="sev l">منخفضة</td><td>قراءة .env على ويندوز</td><td><span class="mono">read_text()</span> بدون <span class="mono">encoding="utf-8"</span>: أي نص عربي في .env يكسر التشغيل على ويندوز.</td></tr>
+  <tr><td class="sev l">منخفضة</td><td>نافذة التفاصيل بلا مؤشر تحميل</td><td>الزر لا يظهر أي استجابة إلى أن يصل الرد (أخذ ~3 ثوانٍ في تجربتي)، فيبدو كأنه لا يعمل.</td></tr>
+  <tr><td class="sev l">منخفضة</td><td>صفحة التحذير باسم الشرطة</td><td>الهوية تستخدم اسم شرطة أبوظبي وألوانها (درع عام بدل الشعار). README نفسه ينبّه أن استخدام الشعار يحتاج إذناً، وأن النطاقات الرسمية غير متحقق منها.</td></tr>
+</table>
+
+<h2 class="break">8. ماذا يعني هذا للعبة الـ 2D</h2>
+<p>النظام فيه عناصر جاهزة لتتحول لعبة، وكل البيانات موجودة في الـ API الحالي (<span class="mono">/api/state</span> كل ثانيتين يكفي لتحريك العالم):</p>
+<table>
+  <tr><th style="width:30%">في كشّاف</th><th>في اللعبة</th></tr>
+  <tr><td>الوكلاء (agent-001…) وحالاتهم: idle / working / hit / paused</td><td>شخصيات «محققين» تتحرك في مقر، تمشي لمكتب الفحص، تحتفل عند كشف احتيال.</td></tr>
+  <tr><td>طابور الروابط (queued → checking → done)</td><td>طرود/رسائل تصل على حزام ناقل أو صندوق بريد، كل واحدة مهمة.</td></tr>
+  <tr><td>الفحص بطريقتين والإخفاء</td><td>ميكانيكية «النظارة»: ترى الصفحة بعين الهاتف وبعين الفاحص، والفرق يكشف الوحش المتخفي.</td></tr>
+  <tr><td>الأحكام والدرجة 0–100</td><td>مؤشر خطر، ألوان (أحمر/برتقالي/أخضر/أزرق رسمي)، نقاط للاعب.</td></tr>
+  <tr><td>العصابات والبصمات المشتركة</td><td>خريطة/لوحة تحقيق بخيوط حمراء تربط المواقع، «زعيم» لكل عصابة.</td></tr>
+  <tr><td>الدورية المستمرة ومصادر الاكتشاف</td><td>دوريات تخرج للمدينة (جوجل، الخرائط، الإعلانات) وتعود بغنائم.</td></tr>
+  <tr><td>حدود الصرف بالساعة والذاكرة</td><td>طاقة/موارد تتجدد، «أرشيف» يوفّر عليك تكرار البحث.</td></tr>
+  <tr><td>الحظر وصفحة التحذير</td><td>بوابة/درع للمدينة يمنع المواطنين من دخول الفخ.</td></tr>
+</table>
+<p>الخطوة التالية: تصميم الواجهة كاملة (الطابع البصري، الشاشات، الشخصيات) وعرضها عليك للموافقة قبل أي بناء.</p>
+
+<h2>ملحق: ملفات التشغيل</h2>
+<ul>
+  <li><span class="mono">kashshaf-run/supabase_emulator.py</span>: محاكي Supabase المحلي.</li>
+  <li><span class="mono">kashshaf-run/run_demo.py</span>: يمرّر بيانات التجربة ويحفظ <span class="mono">demo_results.json</span>.</li>
+  <li><span class="mono">kashshaf-run/emulator_users.json</span>: حساب المحلل التجريبي المحلي.</li>
+  <li>المستودع المستنسخ: <span class="mono">C:\k\kashshaf</span> (مسار قصير لأن ويندوز رفض المسار الطويل أثناء git clone).</li>
+</ul>
+</body>
+</html>

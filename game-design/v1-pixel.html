@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>كشّاف · تصميم لعبة المقر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night:#0a1428; --navy:#0f2347; --navy2:#16305e; --blue:#2f6fc2; --gold:#e8b04a; --gold2:#b98523;
+    --sand:#e9dcc2; --red:#d6304a; --green:#3fb56a; --amber:#e08a2c; --ink:#e9eef8; --muted:#9fb0cc;
+    --paper:#f4f6fa; --paperInk:#1d2939;
+  }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; background:var(--night); color:var(--ink); font-family:"Noto Kufi Arabic", Tahoma, sans-serif; line-height:1.8; }
+  .px { font-family:"Press Start 2P", monospace; letter-spacing:.5px; }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 16px; }
+  header.top { position:sticky; top:0; z-index:20; background:#081022ee; backdrop-filter:blur(4px); border-bottom:3px solid var(--gold2); }
+  header.top .wrap { display:flex; align-items:center; gap:18px; height:56px; }
+  header.top b { color:var(--gold); font-size:18px; }
+  header.top nav { display:flex; gap:4px; margin-inline-start:auto; flex-wrap:wrap; }
+  header.top nav a { color:var(--muted); text-decoration:none; font-size:13px; padding:4px 10px; border:2px solid transparent; }
+  header.top nav a:hover { color:#fff; border-color:var(--navy2); }
+  section.s { padding:44px 0 20px; }
+  h2 { font-size:24px; margin:0 0 4px; color:#fff; }
+  h2 .n { font-family:"Press Start 2P"; font-size:13px; color:var(--gold); margin-inline-end:10px; }
+  .lead { color:var(--muted); margin:0 0 18px; max-width:880px; }
+  .pixbox { border:4px solid #000; box-shadow: inset 0 0 0 3px var(--gold2), 0 0 0 3px var(--navy2), 0 10px 0 #000a; background:var(--navy); }
+
+  /* flow strip */
+  .flow { display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
+  .flow .st { flex:1 1 150px; padding:12px; text-align:center; font-size:14px; }
+  .flow .st i { display:block; font-style:normal; font-family:"Press Start 2P"; color:var(--gold); font-size:11px; margin-bottom:6px; }
+  .flow .ar { align-self:center; color:var(--gold); font-size:22px; }
+
+  /* login */
+  .login { position:relative; overflow:hidden; height:560px; }
+  .login canvas { position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; }
+  .login .card { position:absolute; top:50%; right:4%; transform:translateY(-50%); width:min(380px, 92%); padding:22px 24px 20px; }
+  @media (max-width: 860px) { .login .card { right:50%; transform:translate(50%,-50%); } }
+  .login .card h3 { margin:0; font-size:26px; color:#fff; text-align:center; }
+  .login .card .sub { text-align:center; color:var(--gold); font-size:12px; margin-bottom:14px; }
+  .field { display:block; margin:10px 0; font-size:13px; color:var(--muted); }
+  .field input { display:block; width:100%; margin-top:4px; padding:10px 12px; background:#06101f; color:#fff; border:3px solid #000;
+                 box-shadow: inset 0 0 0 2px var(--navy2); font:14px "Noto Kufi Arabic"; direction:ltr; text-align:left; }
+  .btn { display:inline-block; cursor:pointer; border:3px solid #000; background:var(--gold); color:#1a1205; font:800 15px "Noto Kufi Arabic";
+         padding:10px 18px; box-shadow: inset -3px -3px 0 var(--gold2), 0 4px 0 #000; text-decoration:none; }
+  .btn:active { transform:translateY(3px); box-shadow: inset -3px -3px 0 var(--gold2); }
+  .btn.block { display:block; width:100%; text-align:center; margin-top:14px; }
+  .btn.ghost { background:var(--navy2); color:#fff; box-shadow: inset -3px -3px 0 #0b1a38, 0 4px 0 #000; }
+
+  /* intro */
+  .intro { display:grid; grid-template-columns: 320px 1fr; gap:24px; padding:24px; align-items:center; }
+  .intro canvas { width:100%; image-rendering:pixelated; background:radial-gradient(circle at 50% 70%, #1d3a70, #0a1428 70%); border:3px solid #000; }
+  .bubble { background:#fff; color:#111; padding:14px 18px; border:3px solid #000; box-shadow:0 4px 0 #000; position:relative; font-size:16px; }
+  .bubble::before { content:""; position:absolute; right:-14px; top:26px; border:8px solid transparent; border-left-color:#000; }
+  .sheet { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:12px; margin-top:18px; }
+  .sheet .c { padding:10px; text-align:center; font-size:13px; }
+  .sheet canvas { width:96px; height:128px; image-rendering:pixelated; }
+  .sheet small { display:block; color:var(--muted); font-size:11.5px; line-height:1.6; }
+
+  /* game */
+  .game { position:relative; }
+  .hud { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:8px 12px; background:#06101f; border-bottom:3px solid #000; font-size:13px; }
+  .hud .room { color:var(--gold); font-weight:800; min-width:220px; }
+  .hud .k { background:var(--navy2); padding:2px 10px; border:2px solid #000; }
+  .hud .k b { font-family:"Press Start 2P"; font-size:11px; margin-inline-end:6px; }
+  .hud .k.r b { color:#ff7b8d; }
+  .hud .keys { margin-inline-start:auto; color:var(--muted); font-size:12px; }
+  .kbd { display:inline-block; font-family:"Press Start 2P"; font-size:9px; background:#fff; color:#000; padding:3px 6px; border:2px solid #000; box-shadow:0 2px 0 #000; margin:0 2px; }
+  .mapbox { position:relative; outline:none; }
+  .mapbox canvas { display:block; width:100%; image-rendering:pixelated; background:#0b1324; }
+  .focus-hint { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#0a1428a8; cursor:pointer; font-size:18px; }
+  .focus-hint span { padding:14px 22px; }
+  .panel { position:absolute; inset:4% 7%; display:none; flex-direction:column; background:#0b1730f5; color:#fff; overflow:hidden; }
+  .panel.open { display:flex; }
+  .panel .ph { display:flex; gap:14px; align-items:flex-end; padding:14px 16px 10px; border-bottom:3px solid #000; background:linear-gradient(#16305e,#0f2347); }
+  .panel .ph canvas { width:60px; height:80px; image-rendering:pixelated; background:#0a1428; border:3px solid #000; }
+  .panel .ph .who { flex:1; }
+  .panel .ph .who b { color:var(--gold); font-size:16px; }
+  .panel .ph .who .sys { font-size:12px; color:var(--muted); }
+  .panel .ph .say { margin-top:4px; font-size:14.5px; min-height:24px; }
+  .panel .x { align-self:flex-start; }
+  .screen { margin:12px 16px 16px; flex:1; overflow:auto; background:var(--paper); color:var(--paperInk); border:3px solid #000; padding:14px 16px; font-size:13.5px; }
+  .screen h4 { margin:0 0 8px; font-size:15px; color:#0B2A5B; }
+  .screen .muted { color:#667085; font-size:12.5px; }
+  .screen table { width:100%; border-collapse:collapse; font-size:12.5px; margin:6px 0 10px; }
+  .screen th { background:#0B2A5B; color:#fff; text-align:right; padding:5px 8px; font-weight:600; }
+  .screen td { border-bottom:1px solid #e3e7ee; padding:5px 8px; vertical-align:top; }
+  .screen .u { font-family:Consolas,monospace; direction:ltr; unicode-bidi:embed; font-size:11.5px; color:#344054; }
+  .screen .kp { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+  .screen .kp div { background:#fff; border:2px solid #d0d7e2; border-top:4px solid #135BA6; padding:6px 8px; }
+  .screen .kp div.d { border-top-color:#C2002F; }
+  .screen .kp b { display:block; font-size:22px; line-height:1.2; color:#0B2A5B; }
+  .screen .kp div.d b { color:#C2002F; }
+  .screen .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .screen .card { background:#fff; border:2px solid #d0d7e2; padding:10px 12px; margin-bottom:10px; }
+  .pill { display:inline-block; color:#fff; font-size:11px; font-weight:700; padding:1px 9px; border-radius:9px; }
+  .tag { display:inline-block; background:#eef2f8; border:1px solid #d0d7e2; font-size:11px; padding:0 6px; margin:2px; border-radius:4px; }
+  .sbtn { display:inline-block; background:#0B2A5B; color:#fff; border:0; padding:6px 12px; font:600 12.5px "Noto Kufi Arabic"; margin:2px; cursor:pointer; }
+  .sbtn.r { background:#C2002F; } .sbtn.g { background:#067647; } .sbtn.l { background:#e4e9f2; color:#0B2A5B; }
+  .screen textarea, .screen input[type=text] { width:100%; font:13px "Noto Kufi Arabic"; padding:8px; border:2px solid #d0d7e2; }
+  .reasons { margin:6px 0; padding-right:18px; } .reasons li { margin:2px 0; }
+  .views { display:grid; grid-template-columns:1fr 1fr; gap:8px; } .views div { background:#f8fafc; border:1px solid #d0d7e2; padding:8px; font-size:12px; }
+  .dots { display:grid; grid-template-columns:repeat(25, 1fr); gap:4px; margin:8px 0; }
+  .dots i { aspect-ratio:1; background:#9aa5b8; border:2px solid #0B2A5B33; } .dots i.w { background:#3fb56a; } .dots i.h { background:#C2002F; }
+  .meter { height:10px; background:#e4e9f2; border:1px solid #c5cedd; margin:3px 0 8px; } .meter i { display:block; height:100%; background:#135BA6; }
+
+  /* mapping table */
+  table.map { width:100%; border-collapse:collapse; font-size:14px; }
+  table.map th { background:var(--navy2); color:var(--gold); text-align:right; padding:8px 10px; border-bottom:3px solid #000; }
+  table.map td { padding:8px 10px; border-bottom:2px solid #13254a; vertical-align:top; }
+  table.map td .sw { display:inline-block; width:14px; height:14px; border:2px solid #000; vertical-align:middle; margin-inline-end:6px; }
+  table.map code { font-family:Consolas,monospace; font-size:12px; color:#9fd0ff; direction:ltr; unicode-bidi:embed; }
+  .notes { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .notes .pixbox { padding:14px 16px; font-size:14px; }
+  .notes h3 { margin:0 0 6px; color:var(--gold); font-size:16px; }
+  .notes ul { margin:0; padding-right:18px; }
+  .palette { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .palette span { width:34px; height:34px; border:3px solid #000; }
+  footer { color:var(--muted); font-size:12px; text-align:center; padding:30px 0 40px; }
+  @media (max-width: 860px) { .intro { grid-template-columns:1fr; } .screen .two, .views { grid-template-columns:1fr; } .screen .kp { grid-template-columns:repeat(2,1fr); } .panel { inset:2%; } }
+</style>
+</head>
+<body>
+
+<header class="top"><div class="wrap">
+  <b>كشّاف</b><span class="px" style="font-size:10px;color:var(--muted)">HQ · DESIGN v1</span>
+  <nav>
+    <a href="#flow">المسار</a><a href="#login">الدخول</a><a href="#intro">الشخصية</a><a href="#hq">المقر</a><a href="#rooms">توزيع الغرف</a><a href="#style">الطابع</a>
+  </nav>
+</div></header>
+
+<div class="wrap">
+
+<section class="s" id="flow">
+  <h2><span class="n">00</span>مسار اللاعب</h2>
+  <p class="lead">لعبة 2D بأسلوب Pixel Art من الأعلى (top-down). كل جزء في نظام كشّاف صار غرفة داخل مقر الشرطة، وفي كل غرفة موظف تقف عنده وتضغط Space فتفتح شاشة النظام الحقيقية لذلك الجزء.</p>
+  <div class="flow">
+    <div class="st pixbox"><i>1</i>صفحة الدخول<br><small style="color:var(--muted)">نفس حسابات Supabase الحالية</small></div><div class="ar">←</div>
+    <div class="st pixbox"><i>2</i>تظهر شخصيتك<br><small style="color:var(--muted)">مواطن بالكندورة والغترة</small></div><div class="ar">←</div>
+    <div class="st pixbox"><i>3</i>بوابة المقر<br><small style="color:var(--muted)">تبدأ عند الاستقبال</small></div><div class="ar">←</div>
+    <div class="st pixbox"><i>4</i>تمشي للغرفة<br><small style="color:var(--muted)">أسهم أو WASD</small></div><div class="ar">←</div>
+    <div class="st pixbox"><i>5</i>Space عند الموظف<br><small style="color:var(--muted)">يفتح شاشة النظام</small></div>
+  </div>
+</section>
+
+<!-- 1. LOGIN -->
+<section class="s" id="login">
+  <h2><span class="n">01</span>شاشة الدخول</h2>
+  <p class="lead">أول ما تفتح اللعبة: واجهة المقر بالليل، والنموذج نفس تسجيل الدخول الحالي (بريد + كلمة مرور عبر Supabase). زر الدخول يأخذك لشاشة الشخصية.</p>
+  <div class="login pixbox">
+    <canvas id="loginCv" width="640" height="280"></canvas>
+    <form class="card pixbox" onsubmit="event.preventDefault(); location.hash='intro';">
+      <h3>كشّاف</h3>
+      <div class="sub">مقر رصد الاحتيال الإلكتروني · <span class="px" style="font-size:9px">HQ</span></div>
+      <label class="field">البريد الإلكتروني<input type="email" placeholder="analyst@…" autocomplete="off"></label>
+      <label class="field">كلمة المرور<input type="password" placeholder="••••••••" autocomplete="off"></label>
+      <button class="btn block" type="submit">دخول المقر ←</button>
+      <p style="margin:10px 0 0;font-size:11.5px;color:var(--muted);text-align:center">للمحللين المصرّح لهم فقط</p>
+    </form>
+  </div>
+</section>
+
+<!-- 2. CHARACTER -->
+<section class="s" id="intro">
+  <h2><span class="n">02</span>شخصيتك</h2>
+  <p class="lead">بعد الدخول مباشرة تظهر شخصيتك: مواطن بالكندورة البيضاء والغترة والعقال، يلتفت في الاتجاهات الأربعة، ثم يدخل المقر.</p>
+  <div class="intro pixbox">
+    <canvas id="heroCv" width="240" height="240"></canvas>
+    <div>
+      <div class="bubble" id="heroSay">أهلاً يا محقق! هذا أنت. المقر جاهز، والوكلاء بانتظار أوامرك.</div>
+      <p style="color:var(--muted);font-size:14px;margin:16px 0">يظهر تحت الشخصية اسم الحساب اللي دخلت فيه، وفوقها شارة «محقق كشّاف».</p>
+      <a class="btn" href="#hq" id="enterBtn">ادخل المقر ←</a>
+    </div>
+  </div>
+  <div class="sheet" id="sheet"></div>
+</section>
+
+<!-- 3. HQ -->
+<section class="s" id="hq">
+  <h2><span class="n">03</span>مقر الشرطة (جرّبه)</h2>
+  <p class="lead">هذه هي الخريطة كاملة. انقر عليها، وتحرك بالأسهم أو WASD، وقف عند أي موظف أو زنزانة واضغط <span class="kbd">SPACE</span>. الأرقام والنتائج هنا هي النتائج الحقيقية من تشغيل كشّاف على بيانات التجربة. في النسخة النهائية تقترب الكاميرا وتتبع الشخصية.</p>
+  <div class="game pixbox">
+    <div class="hud">
+      <span class="room" id="hudRoom">الممر الرئيسي</span>
+      <span class="k"><b>10</b>روابط</span><span class="k r"><b>5</b>محظورة</span><span class="k r"><b>5</b>احتيال</span><span class="k"><b>2</b>عصابات</span><span class="k"><b>8</b>وكلاء</span>
+      <span class="keys"><span class="kbd">←↑→↓</span> تحرك · <span class="kbd">SPACE</span> تفاعل · <span class="kbd">ESC</span> إغلاق</span>
+    </div>
+    <div class="mapbox" id="mapbox" tabindex="0">
+      <canvas id="map"></canvas>
+      <div class="focus-hint" id="focusHint"><span class="pixbox">انقر هنا للعب ▶</span></div>
+      <div class="panel pixbox" id="panel">
+        <div class="ph">
+          <canvas id="portrait" width="12" height="16"></canvas>
+          <div class="who"><b id="pName"></b> <span class="sys" id="pSys"></span><div class="say" id="pSay"></div></div>
+          <button class="btn ghost x" id="pClose" type="button">ESC ✕</button>
+        </div>
+        <div class="screen" id="pBody"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 4. ROOMS -->
+<section class="s" id="rooms">
+  <h2><span class="n">04</span>توزيع الغرف على النظام</h2>
+  <p class="lead">كل تبويب في لوحة المحللين الحالية صار غرفة. الشاشة اللي تفتح بـ Space تستخدم نفس الـ API الموجود، فما نحتاج نغيّر الباك إند.</p>
+  <div class="pixbox" style="padding:4px;overflow:auto">
+  <table class="map">
+    <tr><th>الغرفة</th><th>الموظف</th><th>جزء النظام</th><th>ماذا يحدث بعد Space</th><th>الـ API</th></tr>
+    <tr><td><span class="sw" style="background:#ddd6c7"></span>الاستقبال</td><td>موظفة الاستقبال</td><td>لوحة المتابعة</td><td>المؤشرات الثمانية، آخر المواقع المحظورة، العصابات، حالة النظام</td><td><code>/api/state</code> <code>/api/findings</code> <code>/api/gangs</code></td></tr>
+    <tr><td><span class="sw" style="background:#e4e9ee"></span>مختبر الفحص</td><td>فنّي المختبر</td><td>فحص رسالة أو رابط</td><td>تلصق رسالة، الجهاز يفحصها «بعين الهاتف وعين الفاحص»، تظهر النتيجة والأسباب</td><td><code>POST /api/scan</code> <code>/api/scan_result</code></td></tr>
+    <tr><td><span class="sw" style="background:#8a6a45"></span>الأرشيف</td><td>أمين الأرشيف</td><td>النتائج</td><td>جدول كل الأحكام مع البحث والفلترة ونافذة الأدلة</td><td><code>/api/findings</code> <code>/api/finding</code></td></tr>
+    <tr><td><span class="sw" style="background:#3d4f74"></span>غرفة التحقيق</td><td>المحقق</td><td>العصابات</td><td>لوحة فلين بخيوط حمراء تربط المواقع بالبصمات المشتركة</td><td><code>/api/gangs</code></td></tr>
+    <tr><td><span class="sw" style="background:#3e5a5c"></span>غرفة الدوريات</td><td>ضابط اللاسلكي</td><td>الاكتشاف</td><td>بحث جوجل كساكن، سجلات الشهادات، قوائم التصيّد، سجل البحث</td><td><code>POST /api/discover</code> <code>/api/searches</code></td></tr>
+    <tr><td><span class="sw" style="background:#1d2a44"></span>غرفة العمليات</td><td>قائد العمليات</td><td>الوكلاء + غرفة العمليات</td><td>الوكلاء جالسين على مكاتبهم (شاشاتهم تتغير حسب حالتهم الحقيقية)، العدد، تشغيل الدورية، الإيقاف، العدادات</td><td><code>/api/state</code> <code>POST /api/control</code> <code>/api/agents</code></td></tr>
+    <tr><td><span class="sw" style="background:#7c5e3c"></span>قسم السجلات</td><td>كاتب السجل</td><td>السجل</td><td>دفتر كل العمليات</td><td><code>/api/audit</code></td></tr>
+    <tr><td><span class="sw" style="background:#8b8f96"></span>السجن</td><td>حارس السجن + 8 زنازين</td><td>المحظورة</td><td>الحارس: القائمة كاملة وتصدير CSV. كل زنزانة: المواقع المحظورة اللي انتحلت هذا النوع من الجهات، مع الحكم والأدلة وأزرار (إطلاق سراح = سماح، إعادة الفحص)</td><td><code>/api/blocked</code> <code>/api/findings</code> <code>POST /api/override</code></td></tr>
+  </table>
+  </div>
+  <h3 style="margin:22px 0 8px;color:var(--gold)">زنازين السجن</h3>
+  <p class="lead" style="margin-bottom:8px">التقسيم حسب نوع الجهة المنتحلة (حقل <code style="color:#9fd0ff">category</code> في جدول الجهات الرسمية)، وكل موقع محظور يظهر كسجين بالبدلة البرتقالية:</p>
+  <div class="pixbox" style="padding:4px;overflow:auto">
+  <table class="map" id="cellTable"></table>
+  </div>
+</section>
+
+<!-- 5. STYLE -->
+<section class="s" id="style">
+  <h2><span class="n">05</span>الطابع البصري وقرارات التصميم</h2>
+  <div class="notes">
+    <div class="pixbox"><h3>الأسلوب</h3><ul><li>Pixel Art، بلاطة 16×16 مكبّرة ×3.</li><li>منظور من الأعلى مع جدران بواجهة (¾).</li><li>إطارات بكسل ذهبية على خلفية كحلية لكل النوافذ.</li><li>شاشة النظام داخل النافذة بستايل لوحة كشّاف الحالي (فاتح وواضح للقراءة).</li></ul></div>
+    <div class="pixbox"><h3>الألوان</h3><div class="palette">
+      <span style="background:#0a1428" title="ليل"></span><span style="background:#0f2347"></span><span style="background:#2f6fc2"></span><span style="background:#e8b04a"></span><span style="background:#e9dcc2"></span><span style="background:#d6304a"></span><span style="background:#e2742b"></span><span style="background:#3fb56a"></span><span style="background:#f4f2ea"></span>
+    </div><p style="margin:8px 0 0;font-size:13px;color:var(--muted)">كحلي الشرطة، ذهبي للإطارات والتنبيه، أحمر للاحتيال، برتقالي للمساجين، أخضر للآمن.</p></div>
+    <div class="pixbox"><h3>الحياة داخل المقر</h3><ul><li>شاشات الوكلاء في غرفة العمليات تتلون حسب حالتهم الحقيقية: أخضر يفحص، رمادي ينتظر، أحمر وجد احتيالاً.</li><li>عند صدور حكم احتيال جديد: صفارة قصيرة وسجين جديد يدخل الزنزانة المناسبة.</li><li>الأرقام في الشريط العلوي تتحدث كل ثانيتين.</li></ul></div>
+    <div class="pixbox"><h3>التحكم</h3><ul><li><span class="kbd">←↑→↓</span> أو <span class="kbd">WASD</span> للحركة.</li><li><span class="kbd">SPACE</span> للتحدث وفتح الشاشة.</li><li><span class="kbd">ESC</span> للإغلاق.</li><li>على الجوال: عصا تحكم وزر تفاعل على الشاشة.</li></ul></div>
+  </div>
+</section>
+
+<footer>تصميم مبدئي للمراجعة · الأرقام من تشغيل كشّاف المحلي على بيانات التجربة · لا شعارات رسمية مستخدمة (درع عام فقط)</footer>
+</div>
+
+<script>
+(async function () {
+/* ================= sprites ================= */
+const SPR = {
+  citizen: {
+    down: ["....KKKK....","...KKKKKK...","..WWWWWWWW..",".WWWSSSSWWW.",".WWSESSESWW.",".WWSSSSSSWW.",".WWSHHHHSWW.",".WWWSHHSWWW.",".wWWWWWWWWw.","SwWWWWWWWWwS","SwWWWwWWWWwS","..WWWwWWWW..","..WWWWWWWW..","..wWWWWWWw..","..wWW..WWw..","..FF....FF.."],
+    up:   ["....KKKK....","...KKKKKK...","..WWWWWWWW..",".WWWWWWWWWW.",".WWWWWWWWWW.",".WWWWWWWWWW.",".wWWWWWWWWw.",".wWWWWWWWWw.",".wWWWWWWWWw.","SwWWWWWWWWwS","SwWWWWWWWWwS","..WWWWWWWW..","..WWWWWWWW..","..wWWWWWWw..","..wWW..WWw..","..FF....FF.."],
+    left: ["....KKKK....","...KKKKKK...","..WWWWWWWW..","..SSSSWWWWW.","..SESSWWWWW.",".SSSSSWWWWW.","..HHHSWWWWw.","..HHSWWWWWw.","...WWWWWWWw.","...WWSSWWWw.","...WWWWWWWw.","...WWWWWWW..","...WWWWWWW..","...wWWWWWw..","...wW..WWw..","..FF...FF..."],
+  },
+  officer: {
+    down: ["............","...BBBBBB...","..BBBBBBBB..","...HSSSSH...","...SESSES...","...SSSSSS...","....SSSS....","..NNNNNNNN..",".NNNGNNNNNN.",".NnNNNNNNnN.",".SnNNNNNNnS.","..NNNNNNNN..","..PPPPPPPP..","..PPP..PPP..","..PPP..PPP..","..FFF..FFF.."],
+    up:   ["............","...BBBBBB...","..BBBBBBBB..","...HHHHHH...","...HHHHHH...","...SHHHHS...","....SSSS....","..NNNNNNNN..",".NNNNNNNNNN.",".NnNNNNNNnN.",".SnNNNNNNnS.","..NNNNNNNN..","..PPPPPPPP..","..PPP..PPP..","..PPP..PPP..","..FFF..FFF.."],
+  },
+  prisoner: { down: ["............","...HHHHHH...","..HHHHHHHH..","..HSSSSSSH..","..SESSSSES..","...SSSSSS...","....SSSS....","..OOOOOOOO..",".OOOoOOoOOO.",".OoOOOOOOoO.",".SoOOOOOOoS.","..OOOOOOOO..","..OOOOOOOO..","..OOO..OOO..","..OOO..OOO..","..FFF..FFF.."] },
+};
+const PAL = {
+  citizen: { W:"#f4f2ea", w:"#cfcab9", K:"#161616", S:"#c68a5a", E:"#111", H:"#2b2018", F:"#7a5230" },
+  officer: { B:"#0e1b3a", H:"#2b2018", S:"#c68a5a", E:"#111", N:"#23407a", n:"#16295a", G:"#e8b04a", P:"#2a2f3a", F:"#111" },
+  prisoner:{ H:"#2b2018", S:"#c99467", E:"#111", O:"#e2742b", o:"#b8561d", F:"#333" },
+};
+const ROLE = { // officer palette variants per room
+  reception:{ N:"#2f6fc2", n:"#1f4f92" }, lab:{ N:"#e8edf2", n:"#b9c3cf", B:"#0e1b3a" }, archive:{ N:"#6b5a8e", n:"#4e416a" },
+  gangs:{ N:"#8b6a43", n:"#654b2e", B:"#3a2a1a" }, dispatch:{ N:"#23407a", n:"#16295a", G:"#3fb56a" }, ops:{ N:"#0e1b3a", n:"#081127", G:"#e8b04a" },
+  records:{ N:"#5d6b7d", n:"#424e5d" }, prison:{ N:"#2f3b2f", n:"#1f281f", B:"#141a14" }, agent:{},
+};
+function sprite(g, rows, pal, x, y, p, flip) {
+  for (let r = 0; r < rows.length; r++) for (let c = 0; c < 12; c++) {
+    const ch = rows[r][flip ? 11 - c : c];
+    if (ch === "." || !pal[ch]) continue;
+    g.fillStyle = pal[ch]; g.fillRect(x + c * p, y + r * p, p, p);
+  }
+}
+function walkRows(rows, frame) { // swap the last two rows to fake a step
+  if (!frame) return rows;
+  const r = rows.slice(); r[14] = rows[14].replace(/^(..)(.)(.)(.)/, "$1$3$2$4"); r[15] = " " + rows[15].slice(0, 11); return r;
+}
+
+/* ================= login facade ================= */
+{
+  const c = document.getElementById("loginCv"), g = c.getContext("2d");
+  const p = 4;
+  const sky = g.createLinearGradient(0, 0, 0, 280); sky.addColorStop(0, "#050b1a"); sky.addColorStop(1, "#14305e");
+  g.fillStyle = sky; g.fillRect(0, 0, 640, 280);
+  for (let i = 0; i < 90; i++) { g.fillStyle = i % 7 ? "#c9d6ff" : "#e8b04a"; g.fillRect((i * 137) % 640, (i * 59) % 150, i % 5 ? 2 : 3, i % 5 ? 2 : 3); }
+  g.fillStyle = "#f4f0d8"; g.beginPath(); g.arc(560, 50, 18, 0, 7); g.fill(); g.fillStyle = "#050b1a"; g.beginPath(); g.arc(553, 45, 16, 0, 7); g.fill();
+  // building
+  g.fillStyle = "#1b2a4a"; g.fillRect(120, 110, 400, 150); g.fillStyle = "#24385f"; g.fillRect(120, 104, 400, 10);
+  g.fillStyle = "#2b4372"; g.fillRect(250, 80, 140, 34);
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 9; k++) {
+    if (k === 4) continue; g.fillStyle = (r * 9 + k) % 4 ? "#f3d27a" : "#3c5a8f"; g.fillRect(140 + k * 42, 128 + r * 34, 22, 18);
+  }
+  g.fillStyle = "#0a1428"; g.fillRect(296, 200, 48, 60); g.fillStyle = "#2f6fc2"; g.fillRect(300, 204, 18, 56); g.fillRect(322, 204, 18, 56);
+  g.fillStyle = "#e8b04a"; g.fillRect(270, 86, 100, 22); g.fillStyle = "#0f2347"; g.font = "800 13px 'Noto Kufi Arabic'"; g.textAlign = "center"; g.direction = "rtl"; g.fillText("مقر كشّاف", 320, 102);
+  // shield over the door
+  g.fillStyle = "#2f6fc2"; g.beginPath(); g.moveTo(320, 172); g.lineTo(306, 178); g.lineTo(306, 186); g.quadraticCurveTo(308, 194, 320, 198); g.quadraticCurveTo(332, 194, 334, 186); g.lineTo(334, 178); g.closePath(); g.fill();
+  g.fillStyle = "#fff"; g.fillRect(318, 180, 4, 10); g.fillRect(314, 184, 12, 3);
+  // ground, palms, lamps
+  g.fillStyle = "#0d1b33"; g.fillRect(0, 260, 640, 20); g.fillStyle = "#c9b894"; g.fillRect(280, 260, 80, 20);
+  for (const x of [70, 570]) { g.fillStyle = "#5b3d22"; for (let i = 0; i < 12; i++) g.fillRect(x + (i % 2) * 2, 170 + i * 8, 8, 8);
+    g.fillStyle = "#2e7a3c"; for (const [dx, dy] of [[-30,-4],[-18,-12],[0,-16],[18,-12],[30,-4],[-24,4],[24,4]]) g.fillRect(x + dx, 166 + dy, 22, 8); }
+  for (const x of [220, 420]) { g.fillStyle = "#3b4a66"; g.fillRect(x, 200, 4, 60); g.fillStyle = "#ffe9a8"; g.fillRect(x - 4, 194, 12, 8); g.fillStyle = "#ffe9a822"; g.beginPath(); g.arc(x + 2, 200, 40, 0, 7); g.fill(); }
+}
+
+/* ================= character intro + sheet ================= */
+{
+  const c = document.getElementById("heroCv"), g = c.getContext("2d");
+  const dirs = ["down", "left", "up", "right"]; let i = 0;
+  const draw = () => {
+    g.clearRect(0, 0, 240, 240);
+    g.fillStyle = "#00000055"; g.fillRect(72, 214, 96, 10);
+    const d = dirs[i % 4]; sprite(g, SPR.citizen[d === "right" ? "left" : d], PAL.citizen, 48, 26, 12, d === "right");
+    g.fillStyle = "#e8b04a"; g.fillRect(70, 6, 100, 18); g.fillStyle = "#0f2347"; g.font = "700 11px 'Noto Kufi Arabic'"; g.textAlign = "center"; g.direction = "rtl"; g.fillText("محقق كشّاف", 120, 19);
+    i++;
+  };
+  draw(); setInterval(draw, 900);
+  const sheet = document.getElementById("sheet");
+  const items = [
+    ["citizen", "down", PAL.citizen, "أنت · أمام", "مواطن بالكندورة والغترة والعقال"],
+    ["citizen", "left", PAL.citizen, "أنت · جانب", "4 اتجاهات + خطوتين للمشي"],
+    ["citizen", "up", PAL.citizen, "أنت · خلف", ""],
+    ["officer", "down", { ...PAL.officer, ...ROLE.reception }, "موظفة الاستقبال", "لوحة المتابعة"],
+    ["officer", "down", { ...PAL.officer, ...ROLE.lab }, "فنّي المختبر", "فحص رسالة أو رابط"],
+    ["officer", "down", { ...PAL.officer, ...ROLE.gangs }, "المحقق", "العصابات"],
+    ["officer", "down", { ...PAL.officer, ...ROLE.ops }, "قائد العمليات", "الوكلاء"],
+    ["officer", "up", PAL.officer, "وكيل على مكتبه", "واحد لكل وكيل في النظام"],
+    ["officer", "down", { ...PAL.officer, ...ROLE.prison }, "حارس السجن", "المحظورة"],
+    ["prisoner", "down", PAL.prisoner, "سجين = موقع محظور", "اسم النطاق على لوحته"],
+  ];
+  for (const [k, d, pal, t, s] of items) {
+    const box = document.createElement("div"); box.className = "c pixbox";
+    const cv = document.createElement("canvas"); cv.width = 12; cv.height = 16;
+    sprite(cv.getContext("2d"), SPR[k][d], pal, 0, 0, 1, false);
+    box.append(cv); box.insertAdjacentHTML("beforeend", `<div>${t}</div><small>${s}</small>`); sheet.append(box);
+  }
+}
+
+/* ================= demo data (real results from the local run) ================= */
+const V = { fraud: ["احتيال", "#C2002F"], suspicious: ["مشبوه", "#B54708"], safe: ["آمن", "#067647"], official: ["رسمي", "#135BA6"] };
+const pill = (v) => `<span class="pill" style="background:${V[v][1]}">${V[v][0]}</span>`;
+const F = [
+  { u: "http://tamm-refund-uae.localhost:8081/claim", d: "tamm-refund-uae.localhost", v: "fraud", s: 100, e: "تم (خدمات حكومة أبوظبي)", c: "government", src: "رسالة", cl: true, t: "12:22:22",
+    r: ["يُظهر للهواتف صفحة تطلب مالاً أو بيانات ويخفيها عن أدوات الفحص (إخفاء)", "يقدّم نفسه على أنه تم وهو ليس على نطاقها الرسمي (tamm.abudhabi)", "اسم النطاق يقلّد اسم الجهة", "فيه نموذج يطلب بيانات البطاقة", "فيه نموذج يطلب رمز تحقق أو رقم الهوية", "يضغط على الضحية بمهلة قصيرة أو تهديد", "يرسل البيانات المسروقة إلى بوت تيليجرام"] },
+  { u: "http://adpolice-fines-pay.localhost:8081/pay", d: "adpolice-fines-pay.localhost", v: "fraud", s: 100, e: "شرطة أبوظبي", c: "government", src: "رسالة", t: "12:22:12",
+    r: ["يقدّم نفسه على أنه شرطة أبوظبي وهو ليس على نطاقها الرسمي (adpolice.gov.ae)", "اسم النطاق يقلّد اسم الجهة", "فيه نموذج يطلب بيانات البطاقة", "يضغط على الضحية بمهلة قصيرة أو تهديد", "يرسل البيانات المسروقة إلى بوت تيليجرام"] },
+  { u: "http://consumer-protection-refund.localhost:8081/", d: "consumer-protection-refund.localhost", v: "fraud", s: 100, e: "وزارة الاقتصاد (حماية المستهلك)", c: "government", src: "محلل", t: "12:23:13",
+    r: ["يقدّم نفسه على أنه وزارة الاقتصاد (حماية المستهلك) وهو ليس على نطاقها الرسمي", "اسم النطاق يقلّد اسم الجهة", "فيه نموذج يطلب بيانات البطاقة", "يرسل البيانات المسروقة إلى بوت تيليجرام"] },
+  { u: "http://aramex-redelivery.localhost:8081/track?id=AX99231", d: "aramex-redelivery.localhost", v: "fraud", s: 95, e: "أرامكس", c: "courier", src: "رسالة", t: "12:22:33",
+    r: ["يقدّم نفسه على أنه أرامكس وهو ليس على نطاقها الرسمي (aramex.com)", "اسم النطاق يقلّد اسم الجهة", "فيه نموذج يطلب بيانات البطاقة", "يضغط على الضحية بمهلة قصيرة أو تهديد"] },
+  { u: "http://etisalat-points.localhost:8081/redeem", d: "etisalat-points.localhost", v: "fraud", s: 85, e: "اتصالات من e&", c: "telecom", src: "رسالة", t: "12:22:38",
+    r: ["يقدّم نفسه على أنه اتصالات وهو ليس على نطاقها الرسمي", "اسم النطاق يقلّد اسم الجهة", "فيه نموذج يطلب رمز تحقق أو رقم الهوية", "يضغط على الضحية بمهلة قصيرة أو تهديد"] },
+  { u: "http://karak-cafe.localhost:8081/", v: "safe", s: 0, e: "—", src: "رسالة", t: "12:22:41", r: [] },
+  { u: "https://www.adpolice.gov.ae", v: "official", s: 0, e: "شرطة أبوظبي", src: "رسالة", t: "12:22:42", r: ["نطاق رسمي مسجّل لجهة شرطة أبوظبي"] },
+  { u: "https://www.tamm.abudhabi", v: "official", s: 0, e: "تم", src: "رسالة", t: "12:22:42", r: ["نطاق رسمي مسجّل"] },
+  { u: "https://u.ae/en/", v: "official", s: 0, e: "البوابة الرسمية لحكومة الإمارات", src: "محلل", t: "12:23:13", r: ["نطاق رسمي مسجّل"] },
+  { u: "https://www.aramex.com/", v: "official", s: 0, e: "أرامكس", src: "محلل", t: "12:23:13", r: ["نطاق رسمي مسجّل"] },
+];
+const CELLS = [
+  { id: "government", name: "الجهات الحكومية والشرطة", ex: "شرطة أبوظبي، تم، وزارة الداخلية، حماية المستهلك" },
+  { id: "bank", name: "البنوك", ex: "بنك أبوظبي الأول، أبوظبي التجاري، الإمارات دبي الوطني" },
+  { id: "courier", name: "البريد والشحن", ex: "بريد الإمارات، أرامكس" },
+  { id: "telecom", name: "الاتصالات", ex: "اتصالات، دو" },
+  { id: "transport", name: "النقل والطرق", ex: "درب، سالك" },
+  { id: "utility", name: "الكهرباء والماء", ex: "شركة أبوظبي للتوزيع" },
+  { id: "airline", name: "الطيران", ex: "الاتحاد للطيران" },
+  { id: "none", name: "بدون جهة منتحلة", ex: "احتيال عام: استثمار، وظائف، جوائز" },
+];
+const inmates = (id) => F.filter((f) => f.v === "fraud" && (f.c || "none") === id);
+document.getElementById("cellTable").innerHTML = `<tr><th>#</th><th>الزنزانة</th><th>من يُسجن فيها</th><th>حالياً</th></tr>` +
+  CELLS.map((c, i) => `<tr><td class="px" style="font-size:11px;color:var(--gold)">${i + 1}</td><td>${c.name}</td><td style="color:var(--muted)">${c.ex}</td><td>${inmates(c.id).length ? inmates(c.id).map((f) => `<code>${f.d}</code>`).join("<br>") : "—"}</td></tr>`).join("");
+
+/* ================= map ================= */
+const W = 40, H = 28, TILE = 48, P = 3;
+const T = Array.from({ length: H }, () => Array(W).fill("wall"));
+const SOLID = Array.from({ length: H }, () => Array(W).fill(false));
+const set = (x, y, t) => { if (x >= 0 && y >= 0 && x < W && y < H) T[y][x] = t; };
+const fill = (x0, y0, x1, y1, t) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) set(x, y, t); };
+
+const ROOMS = [
+  { id: "ops", name: "غرفة العمليات", sys: "الوكلاء", r: [0, 0, 10, 11], fl: "ops", door: [[5, 11], [6, 11]] },
+  { id: "gangs", name: "غرفة التحقيق", sys: "العصابات", r: [10, 0, 20, 11], fl: "carpet", door: [[14, 11], [15, 11]] },
+  { id: "dispatch", name: "غرفة الدوريات", sys: "الاكتشاف", r: [20, 0, 29, 11], fl: "teal", door: [[24, 11], [25, 11]] },
+  { id: "records", name: "قسم السجلات", sys: "السجل", r: [29, 0, 39, 11], fl: "wood", door: [[34, 11], [35, 11]] },
+  { id: "lab", name: "مختبر الفحص", sys: "فحص رسالة أو رابط", r: [0, 15, 9, 27], fl: "lab", door: [[4, 15], [5, 15]] },
+  { id: "archive", name: "الأرشيف", sys: "النتائج", r: [9, 15, 17, 27], fl: "wood", door: [[12, 15], [13, 15]] },
+  { id: "reception", name: "الاستقبال", sys: "لوحة المتابعة", r: [17, 15, 22, 27], fl: "marble", door: [] },
+  { id: "prison", name: "السجن", sys: "المحظورة", r: [22, 15, 39, 27], fl: "concrete", door: [[22, 20], [22, 21]] },
+];
+for (const R of ROOMS) { const [x0, y0, x1, y1] = R.r; fill(x0 + 1, y0 + 1, x1 - 1, y1 - 1, R.fl); for (const [x, y] of R.door) set(x, y, R.id === "prison" ? "concrete" : "corr"); }
+fill(1, 12, 38, 14, "corr");
+fill(18, 15, 21, 15, "marble");
+set(19, 27, "entrance"); set(20, 27, "entrance");
+// prison cells: 4 on top, 4 at the bottom, walkway between
+const cellRect = (k) => { const top = k < 4, i = k % 4, x0 = 23 + 4 * i, x1 = i === 3 ? 38 : x0 + 2; return { x0, x1, y0: top ? 16 : 23, y1: top ? 18 : 26, bars: top ? 19 : 22 }; };
+for (let k = 0; k < 8; k++) { const c = cellRect(k); fill(c.x0, c.y0, c.x1, c.y1, "cell"); for (let x = c.x0; x <= c.x1; x++) set(x, c.bars, "bars"); }
+for (const x of [26, 30, 34]) { for (let y = 16; y <= 19; y++) set(x, y, "wall"); for (let y = 22; y <= 26; y++) set(x, y, "wall"); }
+
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) SOLID[y][x] = ["wall", "bars", "entrance", "cell"].includes(T[y][x]);
+
+// furniture: [type, x, y, w, h]
+const FURN = [
+  ["bigscreen", 2, 1, 7, 1], ["desk", 1, 4, 3, 1], ["desk", 7, 4, 3, 1], ["desk", 1, 7, 3, 1], ["desk", 7, 7, 3, 1],
+  ["board", 11, 1, 9, 1], ["table", 13, 5, 5, 2], ["plant", 11, 10, 1, 1],
+  ["radio", 21, 1, 4, 1], ["maptable", 24, 5, 4, 2], ["cabinet", 27, 1, 2, 1],
+  ["shelf", 30, 1, 9, 1], ["logdesk", 31, 6, 3, 1], ["cabinet", 36, 4, 3, 1],
+  ["scanner", 1, 18, 3, 2], ["bench", 2, 24, 5, 1], ["plant", 8, 26, 1, 1],
+  ["cabinet", 10, 18, 2, 1], ["cabinet", 14, 18, 3, 1], ["cabinet", 10, 21, 2, 1], ["cabinet", 14, 21, 3, 1], ["desk", 12, 24, 2, 1],
+  ["recdesk", 19, 22, 2, 1], ["plant", 18, 26, 1, 1], ["plant", 21, 26, 1, 1],
+  ["plant", 1, 12, 1, 1], ["plant", 38, 12, 1, 1], ["bench", 8, 14, 2, 1], ["bench", 29, 14, 2, 1], ["bench", 17, 12, 2, 1], ["guarddesk", 37, 20, 2, 1],
+];
+for (const [, x, y, w, h] of FURN) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) SOLID[y + j][x + i] = true;
+
+const LINES = {
+  reception: "أهلاً بك في مقر كشّاف! هذي لوحة المتابعة، كل الأرقام لحظة بلحظة.",
+  lab: "عندك رسالة مشبوهة؟ الصقها هنا وأفحصها لك بعين الهاتف وعين الفاحص.",
+  archive: "كل حكم صدر محفوظ هنا. ابحث، فلتر، وافتح الأدلة.",
+  gangs: "شوف الخيوط الحمراء: هذي مواقع تتشارك نفس البوت أو نفس الرقم.",
+  dispatch: "من هنا نطلّع الدوريات: جوجل، سجلات الشهادات، وقوائم التصيّد.",
+  ops: "هؤلاء الوكلاء. قل لي كم واحد تبي، وشغّل الدورية أو أوقفها.",
+  records: "كل عملية صارت في النظام مكتوبة في هالدفتر.",
+  prison: "السجن فيه كل المواقع المحظورة. كل زنزانة لنوع من الجهات المنتحلة.",
+};
+const NPCS = [
+  { room: "reception", x: 19, y: 21, name: "موظفة الاستقبال" },
+  { room: "lab", x: 6, y: 18, name: "فنّي المختبر" },
+  { room: "archive", x: 12, y: 25, name: "أمين الأرشيف" },
+  { room: "gangs", x: 17, y: 8, name: "المحقق" },
+  { room: "dispatch", x: 22, y: 3, name: "ضابط اللاسلكي" },
+  { room: "ops", x: 5, y: 2, name: "قائد العمليات" },
+  { room: "records", x: 32, y: 5, name: "كاتب السجل" },
+  { room: "prison", x: 37, y: 21, name: "حارس السجن" },
+];
+for (const n of NPCS) SOLID[n.y][n.x] = true;
+const AGENTS = [];
+for (const [dx, dy] of [[1, 5], [7, 5], [1, 8], [7, 8]]) for (let i = 0; i < 3; i++) { AGENTS.push({ x: dx + i, y: dy, st: "idle", until: 0 }); SOLID[dy][dx + i] = true; }
+AGENTS.length = 12;
+
+const INTER = [
+  ...NPCS.map((n) => ({ kind: "npc", x: n.x + 0.5, y: n.y + 0.5, r: 2.3, npc: n })),
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((k) => { const c = cellRect(k); return { kind: "cell", k, x: (c.x0 + c.x1 + 1) / 2, y: c.bars + (k < 4 ? 1 : 0), r: 1.7 }; }),
+];
+
+/* ================= drawing ================= */
+const cv = document.getElementById("map"); cv.width = W * TILE; cv.height = H * TILE;
+const ctx = cv.getContext("2d");
+const st = document.createElement("canvas"); st.width = cv.width; st.height = cv.height;
+const g = st.getContext("2d");
+const FL = {
+  corr: ["#bcae93", "#b4a68b"], marble: ["#e3dccd", "#d2c8b4"], ops: ["#1d2a44", "#19243b"], carpet: ["#3d4f74", "#394a6d"],
+  teal: ["#3e5a5c", "#3a5557"], wood: ["#8a6a45", "#82633f"], lab: ["#e4e9ee", "#d6dde5"], concrete: ["#8b8f96", "#83878e"], cell: ["#6a6e75", "#64686f"],
+};
+const hash = (a, b, c) => { let h = (a * 73856093) ^ (b * 19349663) ^ (c * 83492791); h = (h ^ (h >>> 13)) * 1274126177; return (h ^ (h >>> 16)) >>> 0; };
+const R = (x, y, sx, sy, sw, sh, col, gg = g) => { gg.fillStyle = col; gg.fillRect(x * TILE + sx * P, y * TILE + sy * P, sw * P, sh * P); };
+
+function floor(x, y, t) {
+  const c = FL[t] || FL.corr;
+  if (t === "marble") { g.fillStyle = ((x >> 0) + (y >> 0)) % 2 ? c[0] : c[1]; g.fillRect(x * TILE, y * TILE, TILE, TILE); return; }
+  g.fillStyle = c[0]; g.fillRect(x * TILE, y * TILE, TILE, TILE);
+  if (t === "wood") { for (let i = 0; i < 4; i++) R(x, y, 0, i * 4 + 3, 16, 1, "#6f5233"); R(x, y, (x * 5 + y * 3) % 16, 0, 1, 16, "#6f5233"); return; }
+  if (t === "lab") { R(x, y, 0, 7, 16, 1, "#c4ccd6"); R(x, y, 7, 0, 1, 16, "#c4ccd6"); R(x, y, 15, 0, 1, 16, "#c4ccd6"); R(x, y, 0, 15, 16, 1, "#c4ccd6"); return; }
+  if (t === "corr") { R(x, y, 0, 15, 16, 1, "#a89a80"); R(x, y, 15, 0, 1, 16, "#a89a80"); }
+  if (t === "ops") { R(x, y, 0, 0, 16, 1, "#223152"); }
+  for (let i = 0; i < 3; i++) { const h = hash(x, y, i); R(x, y, h % 16, (h >> 5) % 16, 1, 1, c[1]); }
+}
+function wall(x, y) {
+  const below = y + 1 < H && !["wall"].includes(T[y + 1][x]) && T[y + 1][x] !== "entrance";
+  g.fillStyle = "#26375a"; g.fillRect(x * TILE, y * TILE, TILE, TILE);
+  R(x, y, 0, 0, 16, 2, "#34497a");
+  if (below) { R(x, y, 0, 6, 16, 10, "#1b2846"); for (let r = 0; r < 3; r++) { R(x, y, 0, 6 + r * 3 + 2, 16, 1, "#15203a"); R(x, y, (r % 2) * 8 + 3, 6 + r * 3, 1, 3, "#15203a"); } R(x, y, 0, 15, 16, 1, "#0d1528"); }
+}
+function bars(x, y) {
+  floor(x, y, "concrete");
+  for (let i = 1; i < 16; i += 3) { R(x, y, i, 0, 1, 16, "#c9ced6"); R(x, y, i + 1, 0, 1, 16, "#7d838d"); }
+  R(x, y, 0, 1, 16, 2, "#a3aab5"); R(x, y, 0, 12, 16, 2, "#a3aab5");
+}
+function furniture([type, x, y, w, h]) {
+  if (type === "desk" || type === "logdesk") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 0, 3, 16, 9, "#8a5a32"); R(x + i, y, 0, 3, 16, 1, "#a8743f"); R(x + i, y, 0, 12, 16, 3, "#5e3b1f"); }
+    R(x, y, 1, 12, 2, 4, "#3e2714"); R(x + w - 1, y, 13, 12, 2, 4, "#3e2714");
+    if (type === "logdesk") { R(x + 1, y, 2, 4, 12, 7, "#f4efe1"); R(x + 1, y, 7, 4, 1, 7, "#b3a98f"); for (let i = 0; i < 3; i++) { R(x + 1, y, 3, 5 + i * 2, 3, 1, "#6b7280"); R(x + 1, y, 9, 5 + i * 2, 4, 1, "#6b7280"); } }
+    if (type === "desk" && x === 12) { R(x, y, 3, 4, 8, 6, "#f4efe1"); R(x + 1, y, 2, 3, 10, 7, "#d9b36b"); }
+  } else if (type === "recdesk") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 0, 2, 16, 12, "#f0ebe0"); R(x + i, y, 0, 2, 16, 2, "#c9a35a"); R(x + i, y, 0, 13, 16, 3, "#8c7a5c"); }
+    R(x, y, 10, 5, 4, 3, "#e8b04a"); R(x + 1, y, 3, 5, 6, 5, "#1d2a44"); R(x + 1, y, 4, 6, 4, 3, "#2f6fc2");
+  } else if (type === "bigscreen") {
+    R(x, y, 0, 1, 16 * w, 13, "#0a0f1a"); R(x, y, 1, 2, 16 * w - 2, 11, "#0d2b52");
+  } else if (type === "board") {
+    R(x, y, 0, 0, 16 * w, 14, "#5e3b1f"); R(x, y, 1, 1, 16 * w - 2, 12, "#b5864f");
+    const pins = [[2, 4], [5, 9], [8, 3], [11, 8], [14, 4], [17, 10], [21, 5], [25, 9], [29, 4], [33, 8], [38, 5], [42, 10]];
+    for (const [px, py] of pins) { R(x, y, px * 3 - 2, py - 3, 4, 4, "#f4efe1"); }
+    g.strokeStyle = "#d6304a"; g.lineWidth = 3; g.beginPath();
+    [[0, 2], [2, 4], [4, 1], [5, 8], [8, 10], [10, 6], [6, 11]].forEach(([a, b]) => { const A = pins[a], B = pins[b];
+      g.moveTo(x * TILE + (A[0] * 3) * P, y * TILE + (A[1] - 1) * P); g.lineTo(x * TILE + (B[0] * 3) * P, y * TILE + (B[1] - 1) * P); });
+    g.stroke(); for (const [px, py] of pins) R(x, y, px * 3 - 1, py - 4, 2, 2, "#d6304a");
+  } else if (type === "table") {
+    R(x, y, 0, 2, 16 * w, 16 * h - 4, "#5b4129"); R(x, y, 1, 3, 16 * w - 2, 16 * h - 6, "#6f5033");
+    for (let i = 0; i < 5; i++) R(x, y, 6 + i * 14, 8 + (i % 2) * 8, 8, 10, i % 2 ? "#f4efe1" : "#e8e2d0");
+    R(x, y, 30, 12, 10, 8, "#c9d6ff");
+  } else if (type === "radio") {
+    R(x, y, 0, 2, 16 * w, 12, "#20262f"); R(x, y, 0, 2, 16 * w, 2, "#3a4350");
+    for (let i = 0; i < w * 3; i++) { R(x, y, 3 + i * 5, 6, 3, 3, ["#3fb56a", "#e8b04a", "#d6304a"][i % 3]); R(x, y, 3 + i * 5, 10, 3, 2, "#9aa5b8"); }
+  } else if (type === "maptable") {
+    R(x, y, 0, 1, 16 * w, 16 * h - 2, "#3b2a1a"); R(x, y, 2, 3, 16 * w - 4, 16 * h - 6, "#4f8f9c");
+    for (let i = 0; i < 6; i++) R(x, y, 4, 6 + i * 4, 16 * w - 8, 1, "#c9b894");
+    for (let i = 0; i < 5; i++) R(x, y, 8 + i * 11, 4, 1, 16 * h - 8, "#c9b894");
+    for (const [a, b] of [[12, 9], [30, 14], [45, 22], [20, 24], [52, 10]]) R(x, y, a, b, 3, 3, "#d6304a");
+  } else if (type === "shelf") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 0, 0, 16, 15, "#5e3b1f"); for (let r = 0; r < 2; r++) for (let b = 0; b < 7; b++) R(x + i, y, 1 + b * 2, 1 + r * 7, 2, 6, ["#b23a48", "#2f6fc2", "#e8b04a", "#3fb56a", "#7a5a8e", "#c9b894", "#1d2a44"][(b + i + r) % 7]); }
+  } else if (type === "cabinet") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 1, 1, 14, 14, "#8d96a3"); R(x + i, y, 1, 1, 14, 1, "#b3bcc8"); for (let d = 0; d < 3; d++) { R(x + i, y, 2, 3 + d * 4, 12, 1, "#6b7380"); R(x + i, y, 7, 4 + d * 4, 2, 1, "#2a2f3a"); } }
+  } else if (type === "plant") {
+    R(x, y, 5, 10, 6, 5, "#7a4a2a"); R(x, y, 4, 9, 8, 2, "#93603a");
+    for (const [a, b] of [[7, 2], [4, 4], [9, 4], [3, 7], [10, 7], [6, 6], [8, 8]]) R(x, y, a, b, 3, 3, "#2e8a46");
+  } else if (type === "bench") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 0, 6, 16, 3, "#8a5a32"); R(x + i, y, 0, 10, 16, 3, "#8a5a32"); R(x + i, y, 2, 13, 2, 3, "#3e2714"); R(x + i, y, 12, 13, 2, 3, "#3e2714"); }
+  } else if (type === "scanner") {
+    R(x, y, 0, 2, 16 * w, 16 * h - 3, "#9aa6b5"); R(x, y, 0, 2, 16 * w, 2, "#c4ccd6"); R(x, y, 0, 16 * h - 3, 16 * w, 2, "#6b7380");
+    R(x, y, 4, 6, 9, 16, "#111"); R(x, y, 5, 8, 7, 12, "#123d2a");
+    R(x, y, 20, 6, 22, 14, "#111"); R(x, y, 22, 8, 18, 10, "#0d2b52");
+    for (let i = 0; i < 4; i++) { R(x, y, 6, 9 + i * 3, 5, 1, "#3fb56a"); R(x, y, 24, 9 + i * 2, 12 - i * 2, 1, "#9fd0ff"); }
+    R(x, y, 4, 24, 9, 2, "#e8b04a"); R(x, y, 20, 24, 22, 2, "#e8b04a");
+  } else if (type === "guarddesk") {
+    for (let i = 0; i < w; i++) { R(x + i, y, 0, 4, 16, 9, "#4a4f57"); R(x + i, y, 0, 4, 16, 2, "#6b717b"); }
+    R(x, y, 4, 5, 3, 2, "#e8b04a"); R(x + 1, y, 3, 5, 8, 4, "#2a2f3a");
+  }
+}
+function plaque(cx, cy, title, sub, w = 3.3) {
+  const X = cx * TILE, Y = cy * TILE, Wd = w * TILE, Hd = 1.08 * TILE;
+  g.fillStyle = "#000"; g.fillRect(X - Wd / 2 - 3, Y - Hd / 2 - 3, Wd + 6, Hd + 6);
+  g.fillStyle = "#e8b04a"; g.fillRect(X - Wd / 2, Y - Hd / 2, Wd, Hd);
+  g.fillStyle = "#0f2347"; g.fillRect(X - Wd / 2 + 3, Y - Hd / 2 + 3, Wd - 6, Hd - 6);
+  g.direction = "rtl"; g.textAlign = "center"; g.fillStyle = "#fff"; g.font = "800 17px 'Noto Kufi Arabic'"; g.fillText(title, X, Y - 3, Wd - 10);
+  g.fillStyle = "#e8b04a"; g.font = "700 13px 'Noto Kufi Arabic'"; g.fillText(sub, X, Y + 18, Wd - 10);
+}
+await document.fonts.load("700 15px 'Noto Kufi Arabic'"); await document.fonts.load("10px 'Press Start 2P'");
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+  const t = T[y][x];
+  if (t === "wall") wall(x, y); else if (t === "bars") bars(x, y); else if (t === "entrance") { floor(x, y, "marble"); R(x, y, 0, 0, 16, 16, "#2f6fc2"); R(x, y, 1, 1, 14, 14, "#7fb2ea"); R(x, y, x === 19 ? 14 : 1, 6, 1, 4, "#e8b04a"); }
+  else floor(x, y, t);
+}
+// doormats and corridor runner
+for (let x = 2; x <= 37; x++) { R(x, 13, 0, 3, 16, 10, "#7b2534"); R(x, 13, 0, 4, 16, 1, "#c9a35a"); R(x, 13, 0, 11, 16, 1, "#c9a35a"); }
+for (const f of FURN) furniture(f);
+for (const Rm of ROOMS) {
+  if (!Rm.door.length || Rm.id === "prison") continue;
+  const [dx, dy] = Rm.door[1]; plaque(dx + 2.3, dy + 0.5, Rm.name, Rm.sys);
+}
+plaque(19.99, 15.45, "الاستقبال", "لوحة المتابعة", 3.6);
+plaque(31, 15.5, "السجن", "المحظورة · المدخل من الاستقبال", 5);
+// prison cell plaques
+for (let k = 0; k < 8; k++) {
+  const c = cellRect(k), n = inmates(CELLS[k].id).length;
+  const X = ((c.x0 + c.x1 + 1) / 2) * TILE, Y = (c.bars + (k < 4 ? 0.15 : 0.85)) * TILE;
+  g.font = "700 11px 'Noto Kufi Arabic'"; const tw = Math.min(g.measureText(CELLS[k].name).width + 34, (c.x1 - c.x0 + 1) * TILE - 6);
+  g.fillStyle = "#000"; g.fillRect(X - tw / 2 - 2, Y - 13, tw + 4, 24); g.fillStyle = n ? "#d6304a" : "#3a4350"; g.fillRect(X - tw / 2, Y - 11, tw, 20);
+  g.fillStyle = "#fff"; g.direction = "rtl"; g.textAlign = "center"; g.fillText(`${CELLS[k].name} · ${n}`, X, Y + 4, tw - 6);
+}
+
+/* ================= game state ================= */
+const player = { x: 20, y: 25.6, dir: "up", moving: false, t: 0 };
+const keys = new Set();
+let open = null, near = null, focused = false;
+const box = document.getElementById("mapbox"), hint = document.getElementById("focusHint");
+const focusGame = () => { box.focus(); };
+hint.onclick = focusGame; document.getElementById("enterBtn").addEventListener("click", () => setTimeout(focusGame, 400));
+box.addEventListener("focus", () => { focused = true; hint.style.display = "none"; });
+box.addEventListener("blur", () => { focused = false; keys.clear(); if (!open) hint.style.display = "flex"; });
+const MOVE = { ArrowUp: "up", KeyW: "up", ArrowDown: "down", KeyS: "down", ArrowLeft: "left", KeyA: "left", ArrowRight: "right", KeyD: "right" };
+box.addEventListener("keydown", (e) => {
+  if (MOVE[e.code] || e.code === "Space") e.preventDefault();
+  if (open) { if (e.code === "Escape" || e.code === "Space" && e.target === box) closePanel(); return; }
+  if (MOVE[e.code]) keys.add(MOVE[e.code]);
+  if (e.code === "Space" && near) openPanel(near);
+});
+box.addEventListener("keyup", (e) => { if (MOVE[e.code]) keys.delete(MOVE[e.code]); });
+
+const blocked = (x, y) => {
+  for (const [ox, oy] of [[-0.3, -0.25], [0.3, -0.25], [-0.3, 0], [0.3, 0]]) {
+    const tx = Math.floor(x + ox), ty = Math.floor(y + oy);
+    if (tx < 0 || ty < 0 || tx >= W || ty >= H || SOLID[ty][tx]) return true;
+  }
+  return false;
+};
+const roomAt = (x, y) => { if (y >= 12 && y < 15 && x >= 1 && x < 39) return null; return ROOMS.find((r) => x > r.r[0] && x < r.r[2] && y > r.r[1] && y < r.r[3]) || null; };
+
+function update(dt) {
+  let dx = 0, dy = 0;
+  if (keys.has("left")) dx -= 1; if (keys.has("right")) dx += 1; if (keys.has("up")) dy -= 1; if (keys.has("down")) dy += 1;
+  player.moving = !!(dx || dy);
+  if (player.moving) {
+    player.dir = dx < 0 ? "left" : dx > 0 ? "right" : dy < 0 ? "up" : "down";
+    const sp = 4.2 * dt / Math.hypot(dx, dy);
+    if (!blocked(player.x + dx * sp, player.y)) player.x += dx * sp;
+    if (!blocked(player.x, player.y + dy * sp)) player.y += dy * sp;
+    player.t += dt;
+  }
+  near = null; let best = 99;
+  for (const it of INTER) { const d = Math.hypot(it.x - player.x, it.y - (player.y - 0.3)); if (d < it.r && d < best) { best = d; near = it; } }
+  const rm = roomAt(player.x, player.y);
+  const hud = document.getElementById("hudRoom"); const label = rm ? `${rm.name} · ${rm.sys}` : "الممر الرئيسي";
+  if (hud.textContent !== label) hud.textContent = label;
+  const now = performance.now();
+  for (const a of AGENTS) if (now > a.until) { const r = Math.random(); a.st = r < 0.08 ? "hit" : r < 0.6 ? "work" : "idle"; a.until = now + (a.st === "hit" ? 2500 : 1500 + Math.random() * 3000); }
+}
+
+function drawSprite(kind, dir, pal, cx, footY, frame) {
+  const d = dir === "right" ? "left" : dir; const rows = SPR[kind][d] || SPR[kind].down;
+  const x = cx * TILE - 18, y = footY * TILE - 48;
+  ctx.fillStyle = "#0004"; ctx.fillRect(x + 6, y + 44, 24, 5);
+  sprite(ctx, frame ? walkRows(rows, 1) : rows, pal, x, y, P, dir === "right");
+}
+function draw(t) {
+  ctx.drawImage(st, 0, 0);
+  // big screen ticker
+  ctx.save(); ctx.beginPath(); ctx.rect(2 * TILE + 3, TILE + 6, 7 * TILE - 6, 33); ctx.clip();
+  ctx.fillStyle = "#9fd0ff"; ctx.font = "700 14px 'Noto Kufi Arabic'"; ctx.direction = "rtl"; ctx.textAlign = "left";
+  const msg = "10 روابط مفحوصة · 5 مواقع محظورة · عصابتان · آخر حكم: tamm-refund-uae احتيال 100 · ";
+  const off = (t / 25) % 900; ctx.fillText(msg + msg, 2 * TILE - 900 + off, TILE + 28); ctx.restore();
+  // agents + their monitors
+  for (const a of AGENTS) {
+    const col = a.st === "hit" ? ((t / 200) % 2 < 1 ? "#d6304a" : "#7a1020") : a.st === "work" ? ((t / 120 + a.x) % 3 < 1.5 ? "#3fb56a" : "#2c8a50") : "#5b6577";
+    const mx = a.x * TILE + 9, my = (a.y - 1) * TILE + 6;
+    ctx.fillStyle = "#0a0f1a"; ctx.fillRect(mx, my, 30, 21); ctx.fillStyle = col; ctx.fillRect(mx + 3, my + 3, 24, 15); ctx.fillStyle = "#0a0f1a"; ctx.fillRect(mx + 12, my + 21, 6, 4);
+  }
+  // sprites sorted by y
+  const list = [];
+  for (const a of AGENTS) list.push({ y: a.y + 0.75, f: () => drawSprite("officer", "up", PAL.officer, a.x + 0.5, a.y + 0.75, 0) });
+  for (const n of NPCS) list.push({ y: n.y + 0.85, f: () => drawSprite("officer", n.room === "dispatch" ? "up" : "down", { ...PAL.officer, ...ROLE[n.room] }, n.x + 0.5, n.y + 0.85 + Math.sin(t / 500 + n.x) * 0.02, 0) });
+  for (let k = 0; k < 8; k++) { const c = cellRect(k); inmates(CELLS[k].id).forEach((f, i) => {
+    const cx = c.x0 + 0.5 + i, cy = (k < 4 ? c.y0 + 1.9 : c.y0 + 2.2) + Math.sin(t / 400 + i * 2 + k) * 0.03;
+    list.push({ y: cy, f: () => drawSprite("prisoner", "down", PAL.prisoner, cx, cy, 0) }); }); }
+  list.push({ y: player.y, f: () => drawSprite("citizen", player.dir, PAL.citizen, player.x, player.y, player.moving && Math.floor(player.t * 7) % 2) });
+  list.sort((a, b) => a.y - b.y).forEach((s) => s.f());
+  // bars over the bottom-row prisoners' cells are drawn by the static layer; redraw top bars over nothing needed
+  // interaction prompt
+  if (near && !open) {
+    const X = near.x * TILE, Y = (near.kind === "npc" ? near.y - 1.55 : near.y - (near.k < 4 ? 1.2 : -0.6)) * TILE + Math.sin(t / 180) * 3;
+    const label = near.kind === "npc" ? near.npc.name : `زنزانة ${CELLS[near.k].name}`;
+    ctx.font = "700 14px 'Noto Kufi Arabic'"; const tw = ctx.measureText(label).width + 92;
+    ctx.fillStyle = "#000"; ctx.fillRect(X - tw / 2 - 3, Y - 20, tw + 6, 34); ctx.fillStyle = "#fff"; ctx.fillRect(X - tw / 2, Y - 17, tw, 28);
+    ctx.fillStyle = "#0f2347"; ctx.fillRect(X + tw / 2 - 74, Y - 13, 68, 20); ctx.fillStyle = "#fff"; ctx.font = "9px 'Press Start 2P'"; ctx.textAlign = "center"; ctx.direction = "ltr"; ctx.fillText("SPACE", X + tw / 2 - 40, Y + 2);
+    ctx.fillStyle = "#0f2347"; ctx.font = "700 14px 'Noto Kufi Arabic'"; ctx.direction = "rtl"; ctx.textAlign = "right"; ctx.fillText(label, X + tw / 2 - 82, Y + 3);
+  }
+}
+let last = performance.now();
+function loop(t) { const dt = Math.min(0.05, (t - last) / 1000); last = t; if (!open) update(dt); draw(t); requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+
+/* ================= panels ================= */
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fraud = F.filter((f) => f.v === "fraud");
+const GANGS = [
+  { d: ["consumer-protection-refund.localhost", "tamm-refund-uae.localhost", "adpolice-fines-pay.localhost"], i: "telegram_bot: 7712345678:AAFakeTestToken…" },
+  { d: ["etisalat-points.localhost", "aramex-redelivery.localhost"], i: "whatsapp: wa.me/971500000099" },
+];
+const evidence = (f) => `<div class="card"><div>${pill(f.v)} <b>${f.s}/100</b> ${f.cl ? '<span class="tag">إخفاء</span>' : ""} <span class="tag">محظور</span></div>
+  <div class="u">${esc(f.u)}</div><div class="muted">ينتحل: ${esc(f.e)} · 24/11/2026 ${f.t} · بواسطة القواعد</div>
+  <ul class="reasons">${f.r.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+  ${f.cl ? `<div class="views"><div><b>هاتف في الإمارات</b><br>TAMM | منصة تم: you are eligible for a refund of AED 1,250. Enter your Emirates ID and card…</div><div><b>أداة فحص</b><br>Mama Huda's Kitchen: the best chicken machboos recipe…</div></div>` : ""}
+  <div style="margin-top:6px"><button class="sbtn l">التفاصيل والأدلة</button><button class="sbtn g">إطلاق سراح (سماح)</button><button class="sbtn l">إعادة الفحص</button><button class="sbtn l">صفحة التحذير</button></div></div>`;
+const SCREENS = {
+  reception: () => `<h4>لوحة المتابعة</h4><div class="kp">
+    <div><b>10</b>روابط مفحوصة</div><div><b>0</b>في الانتظار</div><div class="d"><b>5</b>مواقع محظورة</div><div class="d"><b>5</b>احتيال</div>
+    <div><b>0</b>مشبوه</div><div><b>1</b>مواقع تخفي نفسها</div><div><b>4</b>مواقع رسمية</div><div><b>6</b>رسائل</div></div>
+    <div class="two"><div class="card"><b>مواقع الاحتيال المحظورة</b>${fraud.map((f) => `<div class="u" style="margin-top:4px">${esc(f.u)}</div><div class="muted">${esc(f.e)} · ${f.t}</div>`).join("")}</div>
+    <div class="card"><b>العصابات</b>${GANGS.map((x, i) => `<div style="margin-top:6px"><b>عصابة ${i + 1}</b> · ${x.d.length} مواقع<br><span class="tag">${esc(x.i)}</span></div>`).join("")}</div></div>
+    <div class="muted"><span class="tag">وكيل Claude متوقف (القواعد فقط)</span><span class="tag">بحث جوجل غير متصل</span><span class="tag">8 وكلاء</span><span class="tag">الوكلاء جاهزون</span></div>`,
+  lab: () => `<h4>فحص رسالة أو رابط</h4><p class="muted">الصق رسالة نصية أو واتساب أو بريداً أو رابطاً. الجهاز يفتح كل رابط مرتين: كهاتف في الإمارات وكأداة فحص.</p>
+    <textarea rows="3">TAMM: You are eligible for a refund of AED 1,250. Claim before midnight: http://tamm-refund-uae.localhost:8081/claim</textarea>
+    <div style="margin:6px 0 10px"><button class="sbtn">إرسال للوكلاء</button></div>
+    <div class="card" style="border-color:#C2002F"><b style="color:#C2002F">احتيال: في الرسالة رابط احتيال. لا تفتحه ولا تُدخل أي بيانات.</b></div>${evidence(F[0])}`,
+  archive: () => `<h4>النتائج</h4><div style="display:flex;gap:6px;margin-bottom:6px"><input type="text" placeholder="بحث في الروابط والعناوين"><select><option>كل الأحكام</option><option>احتيال</option><option>مشبوه</option><option>آمن</option><option>رسمي</option></select></div>
+    <table><tr><th>الحكم</th><th>الوقت</th><th>الرابط</th><th>الجهة</th><th>المصدر</th><th>الحظر</th></tr>${F.map((f) => `<tr><td>${pill(f.v)}<div class="muted">${f.s}/100</div></td><td>${f.t}</td><td class="u">${esc(f.u)}</td><td>${esc(f.e)}</td><td><span class="tag">${f.src}</span></td><td>${f.v === "fraud" ? '<b style="color:#C2002F">محظور</b>' : "—"}</td></tr>`).join("")}</table>`,
+  gangs: () => `<h4>العصابات</h4><p class="muted">مواقع تتشارك بوت تيليجرام أو رقم واتساب أو آيبان أو رقم هاتف أو معرّف تحليلات.</p>
+    ${GANGS.map((x, i) => `<div class="card"><b>عصابة ${i + 1} · ${x.d.length} مواقع</b><div class="muted">أول ظهور 12:22 · آخر نشاط 12:23</div>
+      <svg viewBox="0 0 520 90" style="width:100%;height:90px;margin:6px 0">${x.d.map((d, j) => { const cx = 70 + j * (380 / Math.max(1, x.d.length - 1)); return `<line x1="260" y1="20" x2="${cx}" y2="66" stroke="#C2002F" stroke-width="3"/><rect x="${cx - 62}" y="56" width="124" height="24" fill="#fff" stroke="#0B2A5B" stroke-width="2"/><text x="${cx}" y="72" font-size="10" text-anchor="middle" font-family="Consolas">${d.split(".")[0]}</text>`; }).join("")}<rect x="160" y="6" width="200" height="24" fill="#C2002F"/><text x="260" y="22" fill="#fff" font-size="11" text-anchor="middle" font-family="Consolas">${esc(x.i.split(":")[0])}</text></svg>
+      ${x.d.map((d) => `<span class="tag u">${d}</span>`).join("")}</div>`).join("")}`,
+  dispatch: () => `<h4>الاكتشاف</h4><div class="card"><b>بحث جوجل كساكن في أبوظبي</b><div class="muted">النتائج والإعلانات وملخصات الذكاء الاصطناعي ونتائج الخرائط، من هاتف في أبوظبي.</div>
+    <div style="display:flex;gap:6px;margin-top:6px"><input type="text" placeholder="مثال: دفع مخالفات شرطة أبوظبي"><button class="sbtn">بحث</button></div><button class="sbtn l" style="margin-top:6px">تشغيل كل السكان الافتراضيين</button></div>
+    <div class="two"><div class="card"><b>سجلات الشهادات الرقمية</b><div class="muted">نطاقات جديدة تحمل أسماء جهات رسمية.</div><button class="sbtn l">تشغيل</button></div>
+    <div class="card"><b>قوائم التصيّد العامة (OpenPhish)</b><div class="muted">روابط تصيّد حية تستهدف علامات إماراتية.</div><button class="sbtn l">تشغيل</button></div></div>
+    <div class="card"><b>سجل البحث</b><div class="muted">لا يوجد بحث بعد (بحث جوجل غير متصل في هذا التشغيل).</div></div>`,
+  ops: () => `<h4>الوكلاء · غرفة العمليات</h4><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">العدد <input type="text" value="8" style="width:70px"><button class="sbtn l">تطبيق</button><button class="sbtn g">▶ تشغيل الدورية المستمرة</button><button class="sbtn r">■ إيقاف كل الوكلاء</button></div>
+    <div class="dots">${Array.from({ length: 50 }, (_, i) => `<i class="${i < 8 ? (i === 3 ? "h" : i % 2 ? "w" : "") : ""}" style="${i >= 8 ? "opacity:.15" : ""}"></i>`).join("")}</div>
+    <div class="two"><div class="card">بحث جوجل هذه الساعة <b>0/20</b><div class="meter"><i style="width:0%"></i></div>تحقيقات Claude هذه الساعة <b>0/60</b><div class="meter"><i style="width:0%"></i></div></div>
+    <div class="card">التوكنز منذ التشغيل <b>0</b><br>وفّرت الذاكرة <b>0</b> بحث · <b>0</b> تحقيق</div></div>
+    <table><tr><th>الوكيل</th><th>الحالة</th><th>فحص</th><th>احتيال كشفه</th></tr>${["001", "002", "003", "004", "005", "006", "007", "008"].map((n, i) => `<tr><td>agent-${n}</td><td>متاح</td><td>${[2, 1, 1, 2, 1, 1, 1, 1][i]}</td><td>${[1, 0, 1, 1, 1, 0, 1, 0][i] ? '<b style="color:#C2002F">1</b>' : 0}</td></tr>`).join("")}</table>`,
+  records: () => `<h4>سجل العمليات</h4><table><tr><th>الوقت</th><th>المستخدم</th><th>العملية</th><th>الهدف</th></tr>
+    ${[["12:23:13", "analyst@…", "scan", "3 روابط"], ["12:22:45", "analyst@…", "scan", "adpolice.gov.ae, tamm.abudhabi"], ["12:22:40", "analyst@…", "scan", "karak-cafe.localhost"], ["12:22:30", "analyst@…", "scan", "etisalat-points.localhost"], ["12:22:20", "analyst@…", "scan", "aramex-redelivery.localhost"], ["12:22:15", "analyst@…", "scan", "tamm-refund-uae.localhost"], ["12:22:10", "analyst@…", "scan", "adpolice-fines-pay.localhost"]]
+      .map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="u">${r[3]}</td></tr>`).join("")}</table>`,
+  prison: () => `<h4>المواقع المحظورة · ${fraud.length}</h4><p class="muted">كل موقع هنا محفوظ في قاعدة البيانات. أي رابط جديد على نفس النطاق يُحظر فوراً بدون فحص، ومن يفتحه يرى صفحة التحذير.</p>
+    <div style="margin-bottom:6px"><button class="sbtn">تنزيل القائمة (CSV)</button></div>
+    <table><tr><th>تاريخ الحظر</th><th>النطاق</th><th>الجهة المنتحلة</th><th>الدرجة</th><th>الزنزانة</th><th>القرار</th></tr>${fraud.map((f) => `<tr><td>${f.t}</td><td class="u">${f.d}</td><td>${esc(f.e)}</td><td>${f.s}/100</td><td>${CELLS.find((c) => c.id === f.c).name}</td><td>تلقائي</td></tr>`).join("")}</table>`,
+  cell: (k) => { const list = inmates(CELLS[k].id); return `<h4>زنزانة ${CELLS[k].name} · ${list.length} ${list.length === 1 ? "سجين" : "مساجين"}</h4><p class="muted">المواقع المحظورة اللي انتحلت: ${CELLS[k].ex}</p>${list.length ? list.map(evidence).join("") : '<div class="card muted">الزنزانة فاضية. ما في موقع محظور انتحل هذا النوع من الجهات بعد.</div>'}`; },
+};
+const panel = document.getElementById("panel");
+let typer = null;
+function openPanel(it) {
+  open = it; keys.clear();
+  const isCell = it.kind === "cell", room = isCell ? "prison" : it.npc.room;
+  const pal = isCell ? PAL.prisoner : { ...PAL.officer, ...ROLE[room] };
+  const pc = document.getElementById("portrait").getContext("2d"); pc.clearRect(0, 0, 12, 16); sprite(pc, SPR[isCell ? "prisoner" : "officer"].down, pal, 0, 0, 1, false);
+  const Rm = ROOMS.find((r) => r.id === room);
+  document.getElementById("pName").textContent = isCell ? `زنزانة ${CELLS[it.k].name}` : it.npc.name;
+  document.getElementById("pSys").textContent = `· ${Rm.name} · ${Rm.sys}`;
+  const line = isCell ? (inmates(CELLS[it.k].id).length ? "هذولا المساجين انحكم عليهم بالاحتيال. اختر واحد لتشوف الأدلة." : "ما في أحد هنا… لسا.") : LINES[room];
+  const say = document.getElementById("pSay"); say.textContent = ""; clearInterval(typer); let i = 0;
+  typer = setInterval(() => { say.textContent = line.slice(0, ++i); if (i >= line.length) clearInterval(typer); }, 22);
+  document.getElementById("pBody").innerHTML = isCell ? SCREENS.cell(it.k) : SCREENS[room]();
+  panel.classList.add("open"); box.focus();
+}
+function closePanel() { open = null; panel.classList.remove("open"); box.focus(); }
+document.getElementById("pClose").onclick = closePanel;
+})();
+</script>
+</body>
+</html>
