@@ -229,7 +229,8 @@
 
         <!-- Import a file of links: each one gets the full check; labels (if any) give precision and recall -->
         <div class="card" id="importPanel">
-          <div class="card-head"><div><h3 data-i18n="imp.title"></h3><p data-i18n="imp.desc"></p></div></div>
+          <div class="card-head"><div><h3 data-i18n="imp.title"></h3><p data-i18n="imp.desc"></p></div>
+            <button class="btn outline sm" id="importHistoryBtn" type="button"><i data-icon="log"></i><span data-i18n="imp.history"></span></button></div>
           <label class="dropzone" id="dropzone">
             <input type="file" id="importFile" accept=".csv,.tsv,.txt,.xlsx,.xlsm,.json" hidden>
             <i data-icon="upload"></i>
@@ -324,6 +325,10 @@
 </div>
 
 <dialog id="detail" class="detail"><div id="detailBody"></div></dialog>
+<dialog id="histDlg" class="detail hist-dlg" aria-labelledby="histTitle">
+  <div class="detail-head"><div><b id="histTitle" data-i18n="imp.historyTitle"></b><small data-i18n="imp.historySub"></small></div><button class="btn ghost-dark sm" id="histClose" type="button" data-i18n="close"></button></div>
+  <div class="detail-body"><div class="table-wrap"><table class="table"><thead><tr><th data-i18n="imp.hFile"></th><th data-i18n="imp.hBy"></th><th data-i18n="imp.hAt"></th><th data-i18n="imp.hLinks"></th><th></th></tr></thead><tbody id="histBody"></tbody></table></div></div>
+</dialog>
 <dialog id="keysDlg" class="detail keys-dlg" aria-labelledby="keysTitle">
   <div class="detail-head"><div><b id="keysTitle" data-i18n="keys.title"></b><small data-i18n="keys.sub"></small></div><button class="btn ghost-dark sm" id="keysClose" type="button" data-i18n="close"></button></div>
   <div class="detail-body" id="keysBody"></div>

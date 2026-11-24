@@ -733,3 +733,9 @@ tr.sk-row td { padding-top: 14px; padding-bottom: 14px; }
 .reg-src a:hover { text-decoration: underline; }
 .reg-empty { font-size: 12.5px; margin: 0; }
 @media (max-width: 520px) { .reg-phones li { grid-template-columns: 1fr; } }
+
+/* Import history */
+.hist-dlg { width: min(860px, calc(100vw - 32px)); }
+.hist-dlg .detail-head small { display: block; font-weight: 400; opacity: .85; font-size: 12px; margin-top: 2px; }
+#histBody tr.current td { background: var(--sky-2); }
+#importPanel .card-head { align-items: flex-start; gap: 12px; }

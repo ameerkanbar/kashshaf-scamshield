@@ -231,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.json(store.scan_result(ids))
         if path == "/api/reports":
             return self.json(store.citizen_reports(q.get("domain", "").lower()))
+        if path == "/api/imports":  # History: every uploaded file, newest first
+            return self.json(store.imports_list(int(q.get("limit", "200"))))
         if path == "/api/import_result":
             return self.json(store.import_result(int(q["id"])))
         # Evidence for police use and takedown requests

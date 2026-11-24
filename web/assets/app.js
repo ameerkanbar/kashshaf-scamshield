@@ -874,8 +874,9 @@
     const shown = rows.slice(0, 300), done = d.done === d.total;
     box.innerHTML = `<div class="import-head"><div><b>${esc(b.file_name)}</b>
         <div class="muted">${esc(t("imp.by", { u: b.imported_by, n: b.total }))}${b.skipped ? esc(t("imp.skipped", { n: b.skipped })) : ""} · ${time(b.at)}
-        · ${esc(t("imp.urlcol", { c: String(lastImport.url_column ?? "—") }))}${lastImport.label_column ? ` · ${esc(t("imp.labelcol", { c: String(lastImport.label_column) }))}` : ""}</div></div>
-        <button class="btn outline sm" id="importExport" type="button">${icon("download")}${esc(t("imp.export"))}</button></div>
+        ${lastImport.url_column != null ? `· ${esc(t("imp.urlcol", { c: String(lastImport.url_column) }))}` : ""}${lastImport.label_column ? ` · ${esc(t("imp.labelcol", { c: String(lastImport.label_column) }))}` : ""}</div></div>
+        <div class="row"><button class="btn outline sm" id="importExport" type="button">${icon("download")}${esc(t("imp.export"))}</button>
+          ${done ? `<button class="btn primary sm" id="importNew" type="button">${icon("upload")}${esc(t("imp.newSession"))}</button>` : ""}</div></div>
       <div class="meter"><div class="track" role="progressbar" aria-valuemin="0" aria-valuemax="${d.total}" aria-valuenow="${d.done}"><i style="width:${d.total ? (100 * d.done) / d.total : 0}%"></i></div></div>
       <p class="muted">${done ? esc(t("imp.done")) : esc(t("imp.progress", { d: d.done, n: d.total }))}</p>
       <div class="import-counts">${VCLASS.map((v) => `<span>${pill(v)} <b class="num">${d.counts[v] || 0}</b></span>`).join("")}<span><span class="blocked">${esc(t("blockedTag"))}</span> <b class="num">${d.blocked}</b></span></div>
@@ -896,8 +897,43 @@
           ${r.pending ? "<span></span>" : `<button class="btn outline sm" data-open="${r.url_id}" type="button">${esc(t("details"))}</button>`}</div>`).join("")}</div>
       ${rows.length > shown.length ? `<p class="muted">${esc(t("imp.more", { s: shown.length, n: rows.length }))}</p>` : ""}`;
     $("#importExport").onclick = exportImport;
+    if ($("#importNew")) $("#importNew").onclick = newImportSession;
     const om = $("#onlyMistakes"); if (om) om.onchange = () => { onlyMistakes = om.checked; importKey = ""; renderImport(); };
   }
+  // New session: clear the screen for the next file. Nothing is deleted: every file stays in History.
+  function newImportSession() {
+    lastImport = null; importData = null; importKey = ""; onlyMistakes = false;
+    try { sessionStorage.removeItem(IMPORT_KEY); } catch { /* private mode */ }
+    $("#importResult").hidden = true; $("#importResult").innerHTML = "";
+    $("#importMsg").className = "msg"; $("#importMsg").textContent = t("imp.newSessionMsg");
+    $("#dropzone").scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+  // History: every file ever uploaded; "Show" brings one back with all its results
+  async function openImportHistory() {
+    $("#histBody").innerHTML = skRows(5, 5);
+    $("#histDlg").showModal();
+    let rows;
+    try { rows = await api("/api/imports"); } catch (e) { $("#histBody").innerHTML = `<tr><td colspan="5" class="empty">${esc(e.message)}</td></tr>`; return; }
+    $("#histBody").innerHTML = rows.map((b) => `<tr${lastImport && lastImport.id === b.id ? ' class="current"' : ""}>
+        <td>${clip(b.file_name, { words: 4, chars: 36 })}${b.labelled ? `<div class="sub">${esc(t("imp.hLabelled", { n: b.labelled }))}</div>` : ""}</td>
+        <td>${clip(b.imported_by, { words: 1, chars: 26 })}</td><td>${time(b.at)}</td>
+        <td class="num">${b.total}${b.skipped ? `<div class="sub">${esc(t("imp.skipped", { n: b.skipped }).replace(/^\s*·\s*/, ""))}</div>` : ""}</td>
+        <td>${lastImport && lastImport.id === b.id ? `<span class="tag">${esc(t("imp.hCurrent"))}</span>`
+          : `<button class="btn outline sm" data-hist="${b.id}" type="button">${esc(t("imp.hShow"))}</button>`}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="empty">${esc(t("imp.hNone"))}</td></tr>`;
+    $$("[data-hist]", $("#histBody")).forEach((btn) => (btn.onclick = async () => {
+      lastImport = { id: +btn.dataset.hist, url_column: null, label_column: null };
+      try { sessionStorage.setItem(IMPORT_KEY, JSON.stringify(lastImport)); } catch { /* private mode */ }
+      importKey = ""; onlyMistakes = false; $("#importMsg").textContent = "";
+      $("#histDlg").close();
+      $("#importResult").hidden = false; $("#importResult").innerHTML = skCards(1);
+      await updateImport();
+      $("#importResult").scrollIntoView({ block: "start", behavior: "smooth" });
+    }));
+  }
+  $("#importHistoryBtn").onclick = openImportHistory;
+  $("#histClose").onclick = () => $("#histDlg").close();
+  $("#histDlg").addEventListener("click", (e) => { if (e.target === $("#histDlg")) $("#histDlg").close(); });
   function exportImport() {
     const cols = ["line", "url", "expected", "verdict", "score", "blocked", "pending_review", "entity_ar", "checked_at"];
     const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;

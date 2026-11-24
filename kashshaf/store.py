@@ -448,6 +448,11 @@ def _chunks(items: list, size: int = 200):
         yield items[i:i + size]
 
 
+def imports_list(limit: int = 200) -> list[dict]:
+    """Every uploaded file, newest first (History on the check page). Nothing is ever deleted."""
+    return supa.select("imports", select="*", order="at.desc", limit=str(limit))
+
+
 def create_import(file_name: str, actor: str, parsed: dict, recheck_hours: float) -> dict:
     """Queue every link of an imported file in bulk and remember the batch.
     A link checked within recheck_hours keeps its verdict; an older one is checked again."""
