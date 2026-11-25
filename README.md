@@ -194,7 +194,8 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
 
 ## Other material
 
-- `report/`: the analysis of the project (PDF and HTML).
+- `docs/`: the presentation and the project description (PDF, Arabic) submitted with the project.
+- Demo video (one minute): https://youtu.be/qWuBrx0JWOY
 
 ## Settings (.env)
 

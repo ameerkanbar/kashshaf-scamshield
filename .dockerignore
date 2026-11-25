@@ -9,4 +9,4 @@ __pycache__
 .claude
 kashshaf-run/local.env
 kashshaf-run/emulator_users.json
-report
+docs
