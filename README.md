@@ -101,6 +101,21 @@ Local TEST scam pages for demos (never host them publicly):
 python3 test_sites/server.py
 ```
 
+## Live deployment (Render, or any Docker host)
+
+Kashshaf is a long-running server (agents work in the background, Chromium takes screenshots), so it runs as a
+Docker web service, not as serverless functions. The repository has a `Dockerfile` and a Render Blueprint
+(`render.yaml`):
+
+1. Render → New → Blueprint → pick this repository.
+2. Enter the secrets Render asks for: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`,
+   `ANTHROPIC_API_KEY`, `SERPAPI_KEY`.
+3. After the first deploy, set `PUBLIC_URL` to the address Render gives (e.g. `https://kashshaf.onrender.com`),
+   so the UAE PASS return address is right.
+
+In the container the server listens on `PORT`, local TEST pages are off (`ALLOW_LOCAL_TEST_SITES=false`) and the
+keys cannot be changed from the web page (`KASHSHAF_LOCK_KEYS=1`): they live in the host's settings.
+
 ## Evidence for police use and takedown requests
 
 When a link is judged fraud or suspicious, Kashshaf captures at that moment: a screenshot as an iPhone in

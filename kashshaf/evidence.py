@@ -248,6 +248,8 @@ def screenshot(url: str, scale: int = 2) -> tuple[bytes | None, str | None]:
             f"--user-data-dir={os.path.join(tmp, 'profile')}", "--window-size=500,1000",
             f"--force-device-scale-factor={scale}", f"--user-agent={fetcher.PHONE_UA + (' KashshafScan' if '.localhost' in url.split('/')[2] else '')}",
             "--lang=ar-AE", "--accept-lang=ar-AE,en-AE"]
+    if hasattr(os, "geteuid") and os.geteuid() == 0:  # in a container Chrome runs as root, which needs these
+        base[1:1] = ["--no-sandbox", "--disable-dev-shm-usage"]
     # 1st try: virtual time, so pages that draw themselves with scripts are finished. A page that never goes
     # quiet (live timers, endless requests, bot checks) freezes virtual time and Chrome hangs, so then
     # 2nd try: real time, loading stopped after 15 s and the screen taken as it stands.

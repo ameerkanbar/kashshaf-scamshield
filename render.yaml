@@ -1,0 +1,23 @@
+# Render Blueprint: New > Blueprint, pick this repository. Secrets are entered in Render, never here.
+services:
+  - type: web
+    name: kashshaf
+    runtime: docker
+    plan: starter            # a free instance sleeps after 15 minutes idle and stops the agents
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: PUBLIC_URL     # the address Render gives, e.g. https://kashshaf.onrender.com
+        sync: false
+      - key: AGENT_COUNT
+        value: "15"

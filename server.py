@@ -300,6 +300,9 @@ class Handler(BaseHTTPRequestHandler):
         # Settings -> Keys: the keys of every service, saved to .env and applied at once
         if path == "/api/keys/test":
             return self.json(envfile.test(data.get("group", ""), data.get("values") or {}))
+        if path in ("/api/keys", "/api/restart") and os.environ.get("KASHSHAF_LOCK_KEYS") == "1":
+            # A public deployment keeps its keys in the host's settings, never changed from the web page.
+            return self.json({"error": "المفاتيح مقفلة في هذا الخادم | Keys are locked on this server"}, 403)
         if path == "/api/keys":
             changes, errors = envfile.clean(dict(data.get("values") or {}))
             if errors:
@@ -523,8 +526,9 @@ def main():
     global pool
     ap = argparse.ArgumentParser()
     ap.add_argument("--agents", type=int, default=config.AGENT_COUNT)
-    ap.add_argument("--port", type=int, default=8080)
-    ap.add_argument("--host", default="127.0.0.1")
+    # A host (Render, Railway, a container) gives the port in PORT and needs the server on every interface.
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8080))
+    ap.add_argument("--host", default=os.environ.get("HOST") or ("0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"))
     args = ap.parse_args()
     missing = config.missing()
     if missing:  # first run: a setup page to enter the keys, then the server restarts itself
