@@ -147,7 +147,7 @@ The link column is found automatically, defanged links (`hxxp`, `[.]`) are resto
 the full check. If the file has a label column (`label`, `class`, `is_phishing`... with values such as
 phishing / legitimate, 1 / 0, احتيال / سليم), the page shows precision, recall, F1 and accuracy, where
 "flagged" means blocked for the public (fraud, or suspicious pending review). Results export to CSV.
-For a large evaluation set, raise `AI_MAX_PER_HOUR` so every link gets the Claude investigation.
+There is no hourly cap by default, so every link in an evaluation set gets the Claude investigation.
 
 - **Agents off? The file still runs.** If the agents are stopped when a file comes in, they are started for it
   and stopped again once every link is checked. Pressing start or stop meanwhile overrides this; if they were
@@ -190,8 +190,8 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
 | `AGENT_BASE_URL` | empty | Empty = Anthropic API directly. Set only for an Anthropic-compatible gateway |
 | `AGENT_MIN_RULE_SCORE` | 0 | Run Claude only when rules find at least this score (0 = every non-official link gets the full check) |
 | `DISCOVERY_INTERVAL_MIN` | 0 | Minutes between automatic discovery rounds (0 = manual) |
-| `SERP_MAX_PER_HOUR` | 20 | Google searches per hour (patrol, discovery and the agent's own searches). Past it, search pauses |
-| `AI_MAX_PER_HOUR` | 60 | Claude investigations per hour. Past it, the rules judge alone, and any warning sign makes a link suspicious (blocked pending review) |
+| `SERP_MAX_PER_HOUR` | 0 | Optional cap on Google searches per hour (patrol, discovery and the agent's own searches); 0 = no cap. Past a cap, search pauses |
+| `AI_MAX_PER_HOUR` | 0 | Optional cap on Claude investigations per hour; 0 = no cap. Past a cap, the rules judge alone, and any warning sign makes a link suspicious (blocked pending review) |
 | `PATROL_INTERVAL_SEC` | 90 | Seconds between patrol rounds in the operations room |
 | `SEARCH_COOLDOWN_HOURS` | 24 | The same resident search is not run (or paid for) again within this window |
 | `AGENT_SEARCH_CACHE_HOURS` | 168 | The agent's own searches are answered from the database for a week |
@@ -238,8 +238,9 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
   JavaScript redirects are not followed. Both need fixing before facing the open internet.
 - **WHOIS for `.ae`.** The `.ae` registry limits automated WHOIS, so registration data for `.ae` domains is often
   missing.
-- **Cost and limits.** Every Claude investigation and every Google search costs money, so both have hourly caps
-  (`AI_MAX_PER_HOUR`, `SERP_MAX_PER_HOUR`); past the cap the rules judge alone and lean towards "suspicious".
+- **Cost.** Every Claude investigation and every Google search costs money. There is no cap by default; repeated
+  searches and recently checked links are answered from the database instead of paid for again. Optional hourly
+  caps (`AI_MAX_PER_HOUR`, `SERP_MAX_PER_HOUR`) protect a small plan; past a cap the rules judge alone.
 - **Registry not confirmed.** Official domains and numbers are marked unverified until each body confirms them.
 - **Left out:** automatic takedown submission (we draft the request, a person sends it), social media and SMS
   sources, signing evidence with UAE PASS, TAMM integration.

@@ -1,8 +1,8 @@
 """On/off switch, spending caps and the patrol loop.
 
 - stop(): agents stop taking links, the running search round is cancelled, patrol stops.
-- Caps: Google searches and Claude investigations per hour (and in total since the server
-  started). Past a cap, searches pause and links are judged by the rules only.
+- Caps: optional limits on Google searches and Claude investigations per hour (0 = no cap, the
+  default). Past a cap, searches pause and links are judged by the rules only.
 - Patrol: while on, picks a random resident search every PATROL_INTERVAL_SEC seconds and,
   between searches, checks the free sources (phishing feed, certificate logs).
 """
@@ -45,7 +45,8 @@ def take(kind: str) -> None:
     with _lock:
         if exhausted.get(kind, 0) > time.time():
             raise BudgetExceeded(f"{kind} provider quota is used up; retry after {time.strftime('%H:%M', time.localtime(exhausted[kind]))}")
-        if len(_recent(kind)) >= LIMITS[kind]():
+        cap = LIMITS[kind]()  # 0 = no cap
+        if cap and len(_recent(kind)) >= cap:
             raise BudgetExceeded(f"{kind} hourly cap reached ({LIMITS[kind]()}/h)")
         _usage[kind].append(time.time())
         totals[kind] += 1
@@ -61,7 +62,8 @@ def mark_exhausted(kind: str, seconds: int = 3600) -> None:
 
 def available(kind: str) -> bool:
     with _lock:
-        return exhausted.get(kind, 0) < time.time() and len(_recent(kind)) < LIMITS[kind]()
+        cap = LIMITS[kind]()
+        return exhausted.get(kind, 0) < time.time() and (not cap or len(_recent(kind)) < cap)
 
 
 def saved(kind: str) -> None:

@@ -31,8 +31,9 @@ AGENT_COUNT = int(os.environ.get("AGENT_COUNT", "50"))
 AGENT_MIN_RULE_SCORE = int(os.environ.get("AGENT_MIN_RULE_SCORE", "0"))
 DISCOVERY_INTERVAL_MIN = float(os.environ.get("DISCOVERY_INTERVAL_MIN", "0"))
 # Spending caps (per rolling hour). Past a cap, Google search pauses and links are judged by rules only.
-SERP_MAX_PER_HOUR = int(os.environ.get("SERP_MAX_PER_HOUR", "20"))
-AI_MAX_PER_HOUR = int(os.environ.get("AI_MAX_PER_HOUR", "60"))
+# Hourly caps on paid calls; 0 = no cap (the default). Set one only to protect a small plan while testing.
+SERP_MAX_PER_HOUR = int(os.environ.get("SERP_MAX_PER_HOUR", "0"))
+AI_MAX_PER_HOUR = int(os.environ.get("AI_MAX_PER_HOUR", "0"))
 PATROL_INTERVAL_SEC = int(os.environ.get("PATROL_INTERVAL_SEC", "90"))
 # Memory: don't repeat a search, or re-check a link, within these windows.
 SEARCH_COOLDOWN_HOURS = float(os.environ.get("SEARCH_COOLDOWN_HOURS", "24"))

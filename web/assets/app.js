@@ -253,7 +253,7 @@
     if (page === "live") renderLive();
     // patrol + spending
     $("#patrolLast").innerHTML = patrolText(c);
-    const meter = (label, v, cap) => `<div class="meter"><div class="top"><span>${label}</span><b class="num">${v}/${cap}</b></div><div class="track"><i class="${v >= cap ? "full" : ""}" style="width:${cap ? Math.min(100, (100 * v) / cap) : 0}%"></i></div></div>`;
+    const meter = (label, v, cap) => `<div class="meter"><div class="top"><span>${label}</span><b class="num">${cap ? `${v}/${cap}` : `${v} · ${esc(t("unlimited"))}`}</b></div><div class="track"><i class="${v >= cap ? "full" : ""}" style="width:${cap ? Math.min(100, (100 * v) / cap) : 0}%"></i></div></div>`;
     $("#spend").innerHTML = meter(t("spend.serp"), c.serp_hour, c.serp_cap) + meter(t("spend.ai"), c.ai_hour, c.ai_cap)
       + `<div class="spend-line"><span>${t("spend.tokens")}</span><b class="num">${(c.input_tokens + c.output_tokens).toLocaleString("en")}</b></div>`
       + `<div class="spend-line"><span>${t("spend.saved")}</span><b>${t("spend.savedv", { s: c.serp_saved, a: c.ai_saved })}</b></div>`;
@@ -626,7 +626,7 @@
     renderSettings();
   }
   function detailRows(d) {
-    const v = (k, x) => k === "calls_hour" ? `${x}/${d.cap_hour}` : k === "last_ok" ? time(x) : k === "exhausted" ? (x ? t("yes") : t("no")) : esc(x);
+    const v = (k, x) => k === "calls_hour" ? (d.cap_hour ? `${x}/${d.cap_hour}` : `${x} · ${esc(t("unlimited"))}`) : k === "last_ok" ? time(x) : k === "exhausted" ? (x ? t("yes") : t("no")) : esc(x);
     return Object.entries(d || {}).filter(([k, x]) => x !== null && x !== undefined && k !== "cap_hour" && L.ar["sd." + k])
       .map(([k, x]) => `<div><span>${esc(t("sd." + k))}</span><b class="${["key", "host", "endpoint", "model", "answered_by", "this_server", "others"].includes(k) ? "u" : "num"}">${v(k, x)}</b></div>`).join("");
   }
@@ -652,7 +652,7 @@
       renderSettings();
     }));
     const c = settingsCfg || {};
-    const val = (k, x) => typeof x === "boolean" ? t(x ? "yes" : "no") : k === "agent_base_url" ? (x ? `<span class="u">${esc(x)}</span>` : esc(t("direct"))) : x === null ? "—" : typeof x === "number" ? `<span class="num">${esc(x)}</span>` : clip(String(x), { words: 1, chars: 40, cls: "u" });
+    const val = (k, x) => /_max_per_hour$/.test(k) && x === 0 ? esc(t("unlimited")) : typeof x === "boolean" ? t(x ? "yes" : "no") : k === "agent_base_url" ? (x ? `<span class="u">${esc(x)}</span>` : esc(t("direct"))) : x === null ? "—" : typeof x === "number" ? `<span class="num">${esc(x)}</span>` : clip(String(x), { words: 1, chars: 40, cls: "u" });
     const warn = (k, x) => (k === "allow_local_test_sites" && x) ? `<span class="tag red">${esc(t("cfg.warnTest"))}</span>` : (k === "agent_base_url" && x) ? `<span class="tag">${esc(t("cfg.warnProxy"))}</span>` : "";
     $("#configBody").innerHTML = Object.entries(c).map(([k, x]) => `<tr><td>${esc(t("cfg." + k))}</td><td>${val(k, x)} ${warn(k, x)}</td></tr>`).join("");
     paintIcons($("#settings") || document);
