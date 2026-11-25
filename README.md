@@ -194,7 +194,7 @@ python kashshaf-run/test_import_auto.py             # import with agents off, de
 
 ## Other material
 
-- `docs/`: the presentation and the project description (PDF, Arabic) submitted with the project.
+- `docs/`: the interactive presentation (PPTX: clickable menu, a quiz, animations; and a linked PDF) and the project description (PDF, Arabic).
 - Demo video (one minute): https://youtu.be/qWuBrx0JWOY
 
 ## Settings (.env)
