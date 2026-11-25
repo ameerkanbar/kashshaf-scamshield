@@ -131,8 +131,14 @@ def searches(limit: int = 60, sort: str = "new") -> list[dict]:
     return rows[:limit]
 
 
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
 def add_message(text: str, channel: str, user_id: str | None) -> int:
-    return supa.insert("messages", {"text": text, "channel": channel, "submitted_by": user_id})[0]["id"]
+    # submitted_by holds a Supabase account id; an analyst who logged in with UAE PASS has none
+    # (their identity is recorded in the audit log instead).
+    by = user_id if user_id and _UUID.match(user_id) else None
+    return supa.insert("messages", {"text": text, "channel": channel, "submitted_by": by})[0]["id"]
 
 
 def claim(agent: str) -> dict | None:
